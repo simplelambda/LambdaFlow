@@ -1,0 +1,14 @@
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\Backend.exe
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\Backend.deps.json
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\Backend.runtimeconfig.json
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\Backend.dll
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\Backend.pdb
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.AssemblyInfoInputs.cache
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.AssemblyInfo.cs
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.csproj.CoreCompileInputs.cache
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.dll
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\refint\Backend.dll
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.pdb
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\Backend.genruntimeconfig.cache
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\obj\Release\net8.0\win-x64\ref\Backend.dll

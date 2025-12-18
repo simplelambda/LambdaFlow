@@ -1,0 +1,5 @@
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\publish\Backend.exe
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\publish\Backend.dll
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\publish\Backend.deps.json
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\publish\Backend.runtimeconfig.json
+C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Release\net8.0\win-x64\publish\Backend.pdb

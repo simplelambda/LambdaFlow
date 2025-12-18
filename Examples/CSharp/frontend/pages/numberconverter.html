@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Number Converter - LambdaFlow</title>
+    <link rel="stylesheet" href="../styles/style.css" />
+</head>
+<body class="bg-light text-dark font-sans">
+    <main class="container py-6">
+        <header class="hero mb-6">
+            <h1 class="heading">Number Converter</h1>
+            <p class="subheading">Convert between bases or formats</p>
+        </header>
+
+        <section class="flex flex-col gap-2">
+            <input id="input" type="text" class="p-2 border rounded" placeholder="Enter number" />
+            <select id="mode" class="p-2 border rounded">
+                <option value="dec2hex">Decimal -> Hexadecimal</option>
+                <option value="hex2dec">Hexadecimal -> Decimal</option>
+                <option value="dec2bin">Decimal -> Binary</option>
+                <option value="bin2dec">Binary -> Decimal</option>
+            </select>
+            <button id="go" class="btn btn-primary">Convert</button>
+            <pre id="output" class="p-4 border rounded bg-white"></pre>
+            <a href="/index.html" class="btn btn-outline mt-4">Back</a>
+        </section>
+
+        <script>
+      document.getElementById('go').onclick = () => {
+        const num  = document.getElementById('input').value;
+        const mode = document.getElementById('mode').value;
+          window.send(JSON.stringify({ type: 'numberconverter', text: (mode + "," + num) }));
+      };
+      window.receive = res => {
+        try {
+          const msg = JSON.parse(res);
+          if (msg.type==='numberconverter') document.getElementById('output').textContent = msg.text;
+        } catch {
+          document.getElementById('output').textContent = res;
+        }
+      };
+        </script>
+    </main>
+</body>
+</html>

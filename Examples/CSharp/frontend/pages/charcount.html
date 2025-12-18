@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8" />
+        <title>Character Count - LambdaFlow</title>
+        <link rel="stylesheet" href="../styles/style.css" />
+    </head>
+    <body class="bg-light text-dark font-sans">
+        <main class="container py-6">
+            <header class="hero mb-6">
+                <h1 class="heading">Character Count</h1>
+                <p class="subheading">Count all characters</p>
+            </header>
+
+            <section class="flex flex-col gap-2">
+                <textarea id="input" class="p-2 border rounded" rows="5" placeholder="Enter text"></textarea>
+                <button id="go" class="btn btn-primary">Count</button>
+                <pre id="output" class="p-4 border rounded bg-white"></pre>
+                <a href="/index.html" class="btn btn-outline mt-4">Back</a>
+            </section>
+        </main>
+
+        <script>
+
+            document.getElementById('go').onclick = () => {
+                const txt = document.getElementById('input').value;
+                send(JSON.stringify({ type: 'charcount', text: txt }));
+            };
+
+            window.receive = res => {
+                try {
+                    const msg = JSON.parse(res);
+                    if (msg.type === 'charcount') document.getElementById('output').textContent = msg.text;
+                } catch {
+                    document.getElementById('output').textContent = res;
+                }
+            };
+        </script>
+
+    </body>
+</html>

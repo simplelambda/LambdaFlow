@@ -1,0 +1,67 @@
+@import "general/colors.css";
+@import "general/typography.css";
+@import "general/layout.css";
+@import "general/utilities.css";
+
+.hero {
+    text-align: center;
+    background: var(--color-bg-dark);
+    padding: 2rem 1rem;
+    border-radius: 0.5rem;
+    color: var(--color-text-light);
+    margin-bottom: 3rem;
+}
+
+.subheading {
+    font-size: 1rem;
+    color: var(--color-text-light);
+    opacity: 0.8;
+}
+
+.tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.tool-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.tool-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+.tool-card:active {
+    transform: translateY(0px) scale(0.96);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.card-title {
+    margin: 0 0 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.card-desc {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-text-dark);
+    opacity: 0.8;
+}
+
+main {
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+}

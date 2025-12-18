@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "dgSpecHash": "6R2nv9tQtH8=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Lubia\\Desktop\\David\\Proyectos\\LambdaFlowTest\\backend\\Backend.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.18\\microsoft.netcore.app.runtime.win-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.netcore.app.runtime.linux-x64\\8.0.18\\microsoft.netcore.app.runtime.linux-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.netcore.app.runtime.osx-x64\\8.0.18\\microsoft.netcore.app.runtime.osx-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.18\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.18\\microsoft.aspnetcore.app.runtime.win-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.linux-x64\\8.0.18\\microsoft.aspnetcore.app.runtime.linux-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.osx-x64\\8.0.18\\microsoft.aspnetcore.app.runtime.osx-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.netcore.app.host.linux-x64\\8.0.18\\microsoft.netcore.app.host.linux-x64.8.0.18.nupkg.sha512",
+    "C:\\Users\\Lubia\\.nuget\\packages\\microsoft.netcore.app.host.osx-x64\\8.0.18\\microsoft.netcore.app.host.osx-x64.8.0.18.nupkg.sha512"
+  ],
+  "logs": []
+}
