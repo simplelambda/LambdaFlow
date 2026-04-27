@@ -2,7 +2,7 @@
   "name": "lambdaflow",
   "displayName": "LambdaFlow",
   "description": "Build desktop apps with a web frontend and any backend language.",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "publisher": "simplelambda",
   "engines": {
     "vscode": "^1.85.0"
