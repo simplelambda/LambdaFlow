@@ -2,23 +2,15 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Security;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 
 namespace lambdaflow.lambdaflow.Core
 {
     internal static class Utilities
     {
-        #region Variables            
+        #region Variables
 
-        internal readonly static string signPath = "";
-
-        internal readonly static byte[] RandomIntegrityKey = { };
-
-        internal static FileStream? FrontFS;
+            internal static FileStream? FrontFS;
 
         #endregion
 
@@ -70,6 +62,8 @@ namespace lambdaflow.lambdaflow.Core
                 ".mp3" => "audio/mpeg",
                 ".mp4" => "video/mp4",
                 ".webm" => "video/webm",
+                ".wasm" => "application/wasm",
+                _ => "application/octet-stream"
             };
         }
 

@@ -1,3 +1,5 @@
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("lambdaflow.windows")]
+
 namespace lambdaflow.lambdaflow.Core
 {
 
@@ -14,9 +16,12 @@ namespace lambdaflow.lambdaflow.Core
 
     internal enum SecurityMode
     {
-        MINIMAL,
-        INTEGRITY,
-        HARDENED,
-        RUN
+        Hardened
+    }
+
+    internal enum IPCTransport
+    {
+        StdIO,
+        NamedPipe
     }
 }

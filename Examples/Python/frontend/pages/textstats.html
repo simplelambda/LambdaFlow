@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Text Stats - LambdaFlow</title>
+    <link rel="stylesheet" href="../styles/style.css" />
+    <script src="../lambdaflow.js"></script>
+</head>
+<body class="bg-light text-dark font-sans">
+    <main class="container py-6">
+        <header class="hero mb-6">
+            <h1 class="heading">Text Stats</h1>
+            <p class="subheading">Characters, words, lines and palindrome detection</p>
+        </header>
+
+        <section class="flex flex-col gap-2">
+            <textarea id="input" class="p-2 border rounded" rows="7" placeholder="Enter text"></textarea>
+            <button id="go" class="btn btn-primary">Analyze</button>
+            <pre id="output" class="p-4 border rounded bg-white"></pre>
+            <a href="/index.html" class="btn btn-outline mt-4">Back</a>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('go').addEventListener('click', async () => {
+            const text = document.getElementById('input').value;
+            const res  = await LambdaFlow.request('textstats', { text });
+            document.getElementById('output').textContent =
+                `Characters: ${res.characters}\n` +
+                `Characters (no spaces): ${res.charactersNoSpaces}\n` +
+                `Words: ${res.words}\n` +
+                `Lines: ${res.lines}\n` +
+                `Palindrome: ${res.isPalindrome ? 'yes' : 'no'}\n` +
+                `Normalized: ${res.normalized}`;
+        });
+    </script>
+</body>
+</html>

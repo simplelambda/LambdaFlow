@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(npm install *)",
+      "PowerShell(Get-Command node, npm -ErrorAction SilentlyContinue)",
+      "PowerShell(winget --version 2>&1)",
+      "PowerShell(node --version 2>&1)",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue)",
+      "PowerShell(winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\('PATH', 'Machine'\\) + ';' + [System.Environment]::GetEnvironmentVariable\\('PATH', 'User'\\); node --version; npm --version)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\('PATH', 'Machine'\\) + ';' + [System.Environment]::GetEnvironmentVariable\\('PATH', 'User'\\); Set-Location \"c:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\LambdaFlow\\\\Integrations\\\\vscode-extension\"; npm install 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\('PATH', 'Machine'\\) + ';' + [System.Environment]::GetEnvironmentVariable\\('PATH', 'User'\\); Set-Location \"c:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\LambdaFlow\\\\Integrations\\\\vscode-extension\"; npm run compile 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\('PATH', 'Machine'\\) + ';' + [System.Environment]::GetEnvironmentVariable\\('PATH', 'User'\\); Set-Location \"c:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\LambdaFlow\\\\Integrations\\\\vscode-extension\"; npm run compile 2>&1; ls out/)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\('PATH', 'Machine'\\) + ';' + [System.Environment]::GetEnvironmentVariable\\('PATH', 'User'\\); Set-Location \"c:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\LambdaFlow\\\\Integrations\\\\vscode-extension\"; npx vsce package --no-license 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\('PATH', 'Machine'\\) + ';' + [System.Environment]::GetEnvironmentVariable\\('PATH', 'User'\\); Set-Location \"c:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\LambdaFlow\\\\Integrations\\\\vscode-extension\"; npx vsce package --allow-missing-repository --skip-license 2>&1)",
+      "Bash(dotnet \"lambdaflow.windows.dll\")",
+      "Bash(kill %1)",
+      "Bash(dotnet run *)",
+      "PowerShell(Stop-Process -Force)",
+      "Bash(taskkill /F /IM \"lambdaflow.windows.exe\")",
+      "PowerShell(taskkill /F /IM \"lambdaflow.windows.exe\")",
+      "Bash(handle.exe \"c:/Users/SimpleLambda/Desktop/SimpleLambda/TEST/Results\")",
+      "Bash(tasklist /FI \"IMAGENAME eq lambdaflow.windows.exe\")",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match \"lambdaflow|webview|dotnet\" } 2>$null | Select-Object Id, ProcessName, CPU)",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match \"msedge|WebView|edge\" } 2>$null | Select-Object Id, ProcessName, CPU | Format-Table)",
+      "PowerShell($file = \"C:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\TEST\\\\Results\\\\Test-1.0.0\\\\windows-x64\\\\Accessibility.dll\"; try { [System.IO.File]::Open\\($file, 'Open', 'ReadWrite', 'None'\\) | Out-Null; \"File is free\" } catch { \"LOCKED: $_\" })",
+      "PowerShell(Get-WmiObject Win32_Process | Where-Object { $_.Name -match \"msedgewebview2\" } | Select-Object ProcessId, ParentProcessId, CommandLine | Format-Table -AutoSize -Wrap | Out-String -Width 300)",
+      "PowerShell(Get-WmiObject Win32_Process -Filter \"ProcessId=8180\")",
+      "PowerShell($pids = @\\(6716, 12596, 25128, 21872, 28148, 11620\\); foreach \\($p in $pids\\) { try { Stop-Process -Id $p -Force -Confirm:$false; Write-Output \"Killed $p\" } catch { Write-Output \"Failed $p\" } })",
+      "PowerShell($file = \"C:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\TEST\\\\Results\\\\Test-1.0.0\\\\windows-x64\\\\Accessibility.dll\"; try { $h = [System.IO.File]::Open\\($file, 'Open', 'ReadWrite', 'None'\\); $h.Dispose\\(\\); \"File is free\" } catch { \"Still locked\" })",
+      "PowerShell(Remove-Item \"C:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\TEST\\\\Results\\\\Test-1.0.0\\\\windows-x64\\\\lambdaflow.windows.exe.WebView2\" -Recurse -Force -Confirm:$false 2>&1)",
+      "PowerShell($file = \"C:\\\\Users\\\\SimpleLambda\\\\Desktop\\\\SimpleLambda\\\\TEST\\\\Results\\\\Test-1.0.0\\\\windows-x64\\\\Accessibility.dll\"; try { $h = [System.IO.File]::Open\\($file, 'Open', 'ReadWrite', 'None'\\); $h.Dispose\\(\\); \"File is free\" } catch { \"Still locked: $_\" })",
+      "Bash(tasklist /M Accessibility.dll)",
+      "Read(//c/Users/SimpleLambda/Desktop/SimpleLambda/TEST/Results/Test-1.0.0/windows-x64/**)",
+      "Read(//c/Users/SimpleLambda/Desktop/SimpleLambda/TEST/Results/Test-1.0.0/windows-x64/backend/**)",
+      "Bash(start lambdaflow.windows.exe)"
+    ]
+  }
+}

@@ -6,6 +6,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\LambdaFlow.Core\LambdaFlow.Core.csproj" />
+		<ProjectReference Include="..\..\Core\lambdaflow.core..csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" />
 	</ItemGroup>
 </Project>

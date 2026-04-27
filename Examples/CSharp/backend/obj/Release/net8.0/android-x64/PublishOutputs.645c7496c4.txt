@@ -1,4 +1,0 @@
-C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Backend.dll
-C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Backend.deps.json
-C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Backend.runtimeconfig.json
-C:\Users\Lubia\Desktop\David\Proyectos\LambdaFlowTest\backend\bin\Backend.pdb

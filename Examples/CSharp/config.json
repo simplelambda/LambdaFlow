@@ -1,0 +1,38 @@
+{
+  "appName": "LambdaFlowCSharp",
+  "appVersion": "1.0.0",
+  "organizationName": "SimpleLambda",
+  "appIcon": "app.ico",
+
+  "securityMode": "Hardened",
+  "ipcTransport": "NamedPipe",
+
+  "developmentBackendFolder": "backend",
+  "developmentFrontendFolder": "frontend",
+  "resultFolder": "Results",
+
+  "frontendInitialHTML": "index.html",
+
+  "platforms": {
+    "windows": {
+      "archs": {
+        "x64": {
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin",
+          "compileDirectory": "bin",
+          "runCommand": "Backend.exe",
+          "runArgs": []
+        }
+      }
+    }
+  },
+
+  "window": {
+    "title": "LambdaFlow C#",
+    "width": 1000,
+    "height": 700,
+    "minWidth": 640,
+    "minHeight": 480,
+    "maxWidth": 0,
+    "maxHeight": 0
+  }
+}

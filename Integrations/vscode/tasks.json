@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "LambdaFlow: new app",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run",
+        "--project",
+        "lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj",
+        "--",
+        "new",
+        "${input:appName}",
+        "${input:appDirectory}",
+        "--framework",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "LambdaFlow: build example app",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run",
+        "--project",
+        "lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj",
+        "--",
+        "build",
+        "${workspaceFolder}",
+        "--framework",
+        "${workspaceFolder}"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "build Host.Windows",
+      "command": "dotnet",
+      "type": "process",
+      "args": [ "build", "lambdaflow/Hosts/Windows/lambdaflow.windows.csproj", "-c", "Debug" ],
+      "group": "build"
+    },
+    {
+      "label": "publish Host.Windows win-x64",
+      "command": "dotnet",
+      "type": "process",
+      "args": [ "publish", "lambdaflow/Hosts/Windows/lambdaflow.windows.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true" ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "appName",
+      "type": "promptString",
+      "description": "LambdaFlow app name",
+      "default": "MyLambdaFlowApp"
+    },
+    {
+      "id": "appDirectory",
+      "type": "promptString",
+      "description": "Target directory for the new app",
+      "default": "${workspaceFolder}/Apps/MyLambdaFlowApp"
+    }
+  ]
+}

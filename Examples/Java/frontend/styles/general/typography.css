@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+:root {
+	--font-sans: 'Inter', sans-serif;
+	--font-base-size: 1rem;
+	--font-heading-size: 2rem;
+}
+
+.font-sans {
+	font-family: var(--font-sans);
+}
+
+.text-base {
+	font-size: var(--font-base-size);
+}
+
+.text-heading,
+.heading {
+	font-size: var(--font-heading-size);
+	font-weight: 600;
+}

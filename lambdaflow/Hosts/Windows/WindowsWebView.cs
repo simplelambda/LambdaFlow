@@ -1,25 +1,29 @@
-﻿using System;
+using System;
 using System.IO;
+using System.Text;
 using System.Drawing;
 using System.Text.Json;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using System.Runtime.Versioning;
 using lambdaflow.lambdaflow.Core;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using lambdaflow.lambdaflow.Core.Services.Interfaces;
 
-using static System.Net.Mime.MediaTypeNames;
-
 namespace lambdaflow.lambdaflow.Hosts.Windows{
     [SupportedOSPlatform("windows")]
     internal class WindowsWebView : IWebView{
         #region Variables
 
+            private const string AppHost = "app.lambdaflow.localhost";
+            private const string AppOrigin = "https://" + AppHost;
+            private const string FrontendContentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+
             private WebView2? _view;
-            private Form? _host;
+            private Form?     _host;
             private ZipArchive? _pak;
 
             private bool _initialized;
@@ -28,11 +32,11 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
         #region Public methods
 
-            public async void Initialize(IIPCBridge ipcBridge){
+            public void Initialize(IIPCBridge ipcBridge){
                 if (_initialized)
                     throw new InvalidOperationException("WindowsWebView ya ha sido inicializado.");
 
-                InitializeAsync(ipcBridge).GetAwaiter().GetResult();
+                CreateForm(ipcBridge);
                 _initialized = true;
             }
 
@@ -57,8 +61,11 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 const string installerUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
                 var tmp = Path.Combine(Path.GetTempPath(), "MicrosoftEdgeWebView2Bootstrapper.exe");
 
-                using (var wc = new System.Net.WebClient())
-                    wc.DownloadFile(installerUrl, tmp);
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    var bytes = client.GetByteArrayAsync(installerUrl).GetAwaiter().GetResult();
+                    File.WriteAllBytes(tmp, bytes);
+                }
 
                 var psi = new ProcessStartInfo(tmp, "/silent /install") {
                     UseShellExecute = false,
@@ -72,7 +79,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 if (_view is null || _view.CoreWebView2 is null)
                     return;
 
-                // embebed HTML
+                // embedded HTML
                 if (url.TrimStart().StartsWith("<", StringComparison.Ordinal)) {
                     _view.NavigateToString(url);
                     return;
@@ -86,12 +93,17 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
                 // relative route inside PAK
                 var safePath = url.TrimStart('/');
-                _view.CoreWebView2.Navigate($"https://app/{safePath}");
+                _view.CoreWebView2.Navigate($"{AppOrigin}/{safePath}");
             }
 
             public void SendMessageToFrontend(string message) {
                 if (_view?.CoreWebView2 is null)
                     return;
+
+                if (_host is not null && !_host.IsDisposed && _host.InvokeRequired) {
+                    _host.BeginInvoke(new Action(() => SendMessageToFrontend(message)));
+                    return;
+                }
 
                 var jsArg = JsonSerializer.Serialize(message);
                 _ = _view.CoreWebView2.ExecuteScriptAsync($"window.receive({jsArg});");
@@ -111,7 +123,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
             public void ModfyMinSize(int width, int height){
                 if (_host is not null)
-                    _host.MinimumSize = new Size(width, height);       
+                    _host.MinimumSize = new Size(width, height);
             }
 
             public void ModifyMaxSize(int width, int height){
@@ -140,47 +152,78 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
         #region Private methods
 
-            private async Task InitializeAsync(IIPCBridge ipcBridge) {
+            // Creates the form and schedules WebView2 async init on Form.Load,
+            // so it runs with the WinForms message pump already active (avoids STA deadlock).
+            private void CreateForm(IIPCBridge ipcBridge) {
                 _host = new Form {
-                    Text = Config.Window.Title ?? "LambdaFlow app",
-                    WindowState = FormWindowState.Maximized,
+                    Text          = Config.Window.Title ?? "LambdaFlow app",
+                    WindowState   = FormWindowState.Maximized,
                     StartPosition = FormStartPosition.CenterScreen,
-                    Width = Config.Window.Width,
-                    Height = Config.Window.Height,
-                    MinimumSize = new Size(Config.Window.MinWidth, Config.Window.MinHeight),
-                    MaximumSize = new Size(Config.Window.MaxWidth, Config.Window.MaxHeight),
+                    Width         = Config.Window.Width,
+                    Height        = Config.Window.Height,
+                    MinimumSize   = new Size(Config.Window.MinWidth, Config.Window.MinHeight)
+                };
+
+                if (Config.Window.MaxWidth > 0 && Config.Window.MaxHeight > 0)
+                    _host.MaximumSize = new Size(Config.Window.MaxWidth, Config.Window.MaxHeight);
+
+                _host.FormClosed += (_, _) => {
+                    _pak?.Dispose();
+                    ipcBridge.Dispose();
                 };
 
                 try {
-                    if (File.Exists("app.ico"))
-                        _host.Icon = new Icon("app.ico");
+                    var iconPath = Path.Combine(AppContext.BaseDirectory, Config.AppIcon);
+                    if (File.Exists(iconPath))
+                        _host.Icon = new Icon(iconPath);
                 }
                 catch { }
 
                 _view = new WebView2 { Dock = DockStyle.Fill };
                 _host.Controls.Add(_view);
 
+                _host.Load += async (_, _) => {
+                    try {
+                        await InitializeWebViewAsync(ipcBridge);
+                    }
+                    catch (Exception ex) {
+                        MessageBox.Show(
+                            ex.ToString(),
+                            "LambdaFlow — WebView Error",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                        _host?.Close();
+                    }
+                };
+            }
+
+            private async Task InitializeWebViewAsync(IIPCBridge ipcBridge) {
                 var browserArgs = DetermineFastResolverArgs();
-                var options = new CoreWebView2EnvironmentOptions(browserArgs);
+                var options     = new CoreWebView2EnvironmentOptions(browserArgs);
+
+                var userDataFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    Config.AppName);
 
                 var env = await CoreWebView2Environment.CreateAsync(
                     browserExecutableFolder: null,
-                    userDataFolder: null,
-                    options: options);
+                    userDataFolder:          userDataFolder,
+                    options:                 options);
 
-                await _view.EnsureCoreWebView2Async(env);
+                await _view!.EnsureCoreWebView2Async(env);
 
                 var settings = _view.CoreWebView2.Settings;
-                settings.AreBrowserAcceleratorKeysEnabled = false;
-                settings.AreDefaultContextMenusEnabled = false;
-                settings.IsStatusBarEnabled = false;
+                settings.AreBrowserAcceleratorKeysEnabled  = false;
+                settings.AreDefaultContextMenusEnabled     = false;
+                settings.AreDevToolsEnabled                = Config.DebugMode;
+                settings.AreHostObjectsAllowed             = false;
+                settings.AreDefaultScriptDialogsEnabled    = false;
+                settings.IsStatusBarEnabled                = false;
 
                 await BindFrontendMethods();
 
                 _view.CoreWebView2.WebMessageReceived += async (_, e) => {
                     var msg = e.TryGetWebMessageAsString();
-                    Console.WriteLine($"Message from frontend: {msg}");
-
                     try {
                         await ipcBridge.SendMessageToBackend(msg);
                     }
@@ -189,21 +232,21 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                     }
                 };
 
-                // Abrimos frontend.pak
                 if (Utilities.FrontFS is not null)
                     _pak = new ZipArchive(Utilities.FrontFS, ZipArchiveMode.Read, leaveOpen: true);
-                else
-                    _pak = new ZipArchive(File.OpenRead("frontend.pak"), ZipArchiveMode.Read, leaveOpen: false);
+                else {
+                    var frontendPakPath = Path.Combine(AppContext.BaseDirectory, "frontend.pak");
+                    _pak = new ZipArchive(File.OpenRead(frontendPakPath), ZipArchiveMode.Read, leaveOpen: false);
+                }
 
-                // Map https://app/* to .pak
-                _view.CoreWebView2.AddWebResourceRequestedFilter("https://app/*", CoreWebView2WebResourceContext.All);
+                _view.CoreWebView2.AddWebResourceRequestedFilter($"{AppOrigin}/*", CoreWebView2WebResourceContext.All);
                 _view.CoreWebView2.WebResourceRequested += HandlePakRequest;
 
                 Navigate(Config.FrontendInitialHTML ?? "index.html");
             }
 
             private async Task BindFrontendMethods() {
-                await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                await _view!.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
                         window.send = function(msg) {
                             window.chrome.webview.postMessage(msg);
                         };
@@ -215,64 +258,65 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             }
 
             private string? DetermineFastResolverArgs() {
-                try {
-                    var verStr = CoreWebView2Environment.GetAvailableBrowserVersionString();
-                    if (string.IsNullOrEmpty(verStr))
-                        return null;
-
-                    if (int.TryParse(verStr.Split('.')[0], out int major) && major >= 118) {
-                        return @"--host-resolver-rules=""MAP app 0.0.0.0""";
-                    }
-                }
-                catch {}
-
-                TryAddHostsEntry();
-                return null;
-            }
-
-            private static void TryAddHostsEntry() {
-                try {
-                    string hostsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"drivers\etc\hosts");
-
-                    var lines = File.ReadAllLines(hostsPath);
-                    foreach (var ln in lines) {
-                        if (ln.Contains(" app"))
-                            return;
-                    }
-
-                    File.AppendAllText(hostsPath, $"{Environment.NewLine}127.0.0.1    app{Environment.NewLine}");
-                }
-                catch { }
+                return $"--host-resolver-rules=\"MAP {AppHost} 0.0.0.0\"";
             }
 
             private void HandlePakRequest(object? sender, CoreWebView2WebResourceRequestedEventArgs e) {
                 if (_pak is null || _view?.CoreWebView2 is null)
                     return;
 
-                var uri = new Uri(e.Request.Uri);
+                var relPath = GetPakRelativePath(e.Request.Uri);
+                if (relPath is null) {
+                    SetTextResponse(e, 400, "Bad Request", "Invalid frontend path.");
+                    return;
+                }
+
+                byte[]? bytes = Utilities.ReadPAK(_pak, relPath);
+                if (bytes is null) {
+                    SetTextResponse(e, 404, "Not Found", "Frontend resource not found.");
+                    return;
+                }
+
+                string contentType = Utilities.GetMimeType(relPath);
+
+                var stream = new MemoryStream(bytes);
+                e.Response = _view.CoreWebView2.Environment.CreateWebResourceResponse(
+                    stream, 200, "OK", BuildFrontendHeaders(contentType));
+            }
+
+            private static string? GetPakRelativePath(string requestUri) {
+                var uri  = new Uri(requestUri);
                 var path = uri.AbsolutePath;
 
                 if (path == "/" || string.IsNullOrEmpty(path))
                     path = "/index.html";
-                else if (path.EndsWith("/"))
+                else if (path.EndsWith("/", StringComparison.Ordinal))
                     path += "index.html";
 
-                var relPath = Uri.UnescapeDataString(path.TrimStart('/'));
+                var relPath = Uri.UnescapeDataString(path.TrimStart('/')).Replace('\\', '/');
+                foreach (var segment in relPath.Split('/')) {
+                    if (segment == "..")
+                        return null;
+                }
 
-                byte[]? bytes = Utilities.ReadPAK(_pak, relPath);
-                if (bytes == null)
+                return relPath;
+            }
+
+            private void SetTextResponse(CoreWebView2WebResourceRequestedEventArgs e, int statusCode, string reasonPhrase, string body) {
+                if (_view?.CoreWebView2 is null)
                     return;
 
-                string contentType = Utilities.GetMimeType(relPath);
-
-                Console.WriteLine($"PAK request for: {relPath} (Content-Type: {contentType})");
-
+                var bytes  = Encoding.UTF8.GetBytes(body);
                 var stream = new MemoryStream(bytes);
                 e.Response = _view.CoreWebView2.Environment.CreateWebResourceResponse(
                     stream,
-                    statusCode: 200,
-                    reasonPhrase: "OK",
-                    headers: $"Content-Type: {contentType}");
+                    statusCode,
+                    reasonPhrase,
+                    BuildFrontendHeaders("text/plain; charset=utf-8"));
+            }
+
+            private static string BuildFrontendHeaders(string contentType) {
+                return $"Content-Type: {contentType}\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: {FrontendContentSecurityPolicy}";
             }
 
         #endregion

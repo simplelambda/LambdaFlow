@@ -1,0 +1,99 @@
+{
+  "name": "lambdaflow",
+  "displayName": "LambdaFlow",
+  "description": "Build desktop apps with a web frontend and any backend language.",
+  "version": "0.1.0",
+  "publisher": "simplelambda",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "icon": "icon.png",
+  "main": "./out/extension",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "lambdaflow-sidebar",
+          "title": "LambdaFlow",
+          "icon": "icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "lambdaflow-sidebar": [
+        {
+          "type": "webview",
+          "id": "lambdaflow.sidebar",
+          "name": "LambdaFlow"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "lambdaflow.newProject",
+        "title": "New Project",
+        "category": "LambdaFlow"
+      },
+      {
+        "command": "lambdaflow.buildProject",
+        "title": "Build",
+        "category": "LambdaFlow"
+      },
+      {
+        "command": "lambdaflow.openConfig",
+        "title": "Edit Configuration",
+        "category": "LambdaFlow"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "lambdaflow.configEditor",
+        "displayName": "LambdaFlow Config Editor",
+        "selector": [
+          {
+            "filenamePattern": "config.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "lambdaflow.newProject"
+        },
+        {
+          "command": "lambdaflow.buildProject"
+        },
+        {
+          "command": "lambdaflow.openConfig"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LambdaFlow",
+      "properties": {
+        "lambdaflow.frameworkPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the LambdaFlow framework source directory.",
+          "scope": "machine"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node ./node_modules/typescript/lib/tsc.js -p ./",
+    "watch": "node ./node_modules/typescript/lib/tsc.js -watch -p ./",
+    "package": "npx vsce package --allow-missing-repository --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.9.3"
+  }
+}

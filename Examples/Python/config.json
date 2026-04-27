@@ -1,0 +1,38 @@
+{
+  "appName": "LambdaFlowPython",
+  "appVersion": "1.0.0",
+  "organizationName": "SimpleLambda",
+  "appIcon": "app.ico",
+
+  "securityMode": "Hardened",
+  "ipcTransport": "NamedPipe",
+
+  "developmentBackendFolder": "backend",
+  "developmentFrontendFolder": "frontend",
+  "resultFolder": "Results",
+
+  "frontendInitialHTML": "index.html",
+
+  "platforms": {
+    "windows": {
+      "archs": {
+        "x64": {
+          "compileCommand": "python build.py",
+          "compileDirectory": "bin",
+          "runCommand": "python",
+          "runArgs": ["backend.py"]
+        }
+      }
+    }
+  },
+
+  "window": {
+    "title": "LambdaFlow Python",
+    "width": 1000,
+    "height": 700,
+    "minWidth": 640,
+    "minHeight": 480,
+    "maxWidth": 0,
+    "maxHeight": 0
+  }
+}

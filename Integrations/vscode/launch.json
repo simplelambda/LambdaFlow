@@ -2,13 +2,13 @@
   "version": "1.0.0",
   "configurations": [
     {
-      "name": "Debug LambdaFlow.Host.Windows",
+      "name": "LambdaFlow: run example app",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build Host.Windows",
-      "program": "${workspaceFolder}/src/LambdaFlow.Host.Windows/bin/Debug/net8.0-windows/LambdaFlow.Host.Windows.exe",
+      "preLaunchTask": "LambdaFlow: build example app",
+      "program": "${workspaceFolder}/Results/CSharpTest-1.0.0/windows-x64/lambdaflow.windows.exe",
       "args": [],
-      "cwd": "${workspaceFolder}/src/LambdaFlow.Host.Windows",
+      "cwd": "${workspaceFolder}/Results/CSharpTest-1.0.0/windows-x64",
       "console": "internalConsole",
       "stopAtEntry": false
     }

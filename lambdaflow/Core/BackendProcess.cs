@@ -4,7 +4,7 @@ using System.Threading;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
-namespace LambdaFlow{
+namespace lambdaflow.lambdaflow.Core{
     internal class BackendProcess : IDisposable{
         #region Variables
 
@@ -32,9 +32,15 @@ namespace LambdaFlow{
                 _process.ErrorDataReceived += StdErrHandler;
 
                 _process.Start();
-                _process.BeginOutputReadLine();
-                _process.BeginErrorReadLine();
-                _process.StandardInput.AutoFlush = true;
+
+                if (_process.StartInfo.RedirectStandardOutput)
+                    _process.BeginOutputReadLine();
+
+                if (_process.StartInfo.RedirectStandardError)
+                    _process.BeginErrorReadLine();
+
+                if (_process.StartInfo.RedirectStandardInput)
+                    _process.StandardInput.AutoFlush = true;
             }
 
         #endregion
@@ -60,7 +66,34 @@ namespace LambdaFlow{
 
             internal Task WriteLineAsync(string line, CancellationToken ct = default) {
                 if (line is null) throw new ArgumentNullException(nameof(line));
+                if (!_process.StartInfo.RedirectStandardInput)
+                    throw new InvalidOperationException("Backend standard input is not redirected for this transport.");
+
                 return _process.StandardInput.WriteLineAsync(line.AsMemory(), ct);
+            }
+
+            internal static ProcessStartInfo CreateDefaultStartInfo() {
+                var backendDir = Path.Combine(AppContext.BaseDirectory, "backend");
+                var arch       = Config.CurrentArch;
+                var command    = string.IsNullOrWhiteSpace(arch.RunCommand) ? "Backend.exe" : arch.RunCommand;
+
+                // If the command exists inside backend/ use that path; otherwise fall back to PATH lookup.
+                var localPath = Path.Combine(backendDir, command);
+                var fileName  = File.Exists(localPath) ? localPath : command;
+
+                var psi = new ProcessStartInfo {
+                    FileName               = fileName,
+                    WorkingDirectory       = backendDir,
+                    RedirectStandardInput  = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true
+                };
+                foreach (var arg in arch.RunArgs)
+                    psi.ArgumentList.Add(arg);
+
+                return psi;
             }
 
         #endregion
@@ -93,24 +126,6 @@ namespace LambdaFlow{
                     await handler(data).ConfigureAwait(false);
                 }
                 catch { }
-            }
-
-            private static ProcessStartInfo CreateDefaultStartInfo() {
-                var backendDir = Path.Combine(AppContext.BaseDirectory, "backend");
-                var backendPath = Path.Combine(backendDir, "Backend.exe");
-
-                if (!File.Exists(backendPath))
-                    throw new FileNotFoundException($"Backend executable not found at '{backendPath}'.");
-
-                return new ProcessStartInfo {
-                    FileName = backendPath,
-                    WorkingDirectory = backendDir,
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
             }
 
         #endregion

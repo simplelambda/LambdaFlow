@@ -1,19 +1,21 @@
 using lambdaflow.lambdaflow.Core;
 using lambdaflow.lambdaflow.Core.Services.Interfaces;
-using LambdaFlow;
 using System;
+using System.Collections.Generic;
 
 namespace lambdaflow.lambdaflow.Core.Services.Factories{
     internal static class ServicesFactory{
+        private static readonly Dictionary<Platform, Func<IServices>> Factories = new Dictionary<Platform, Func<IServices>>();
+
+        internal static void Register(Platform platform, Func<IServices> factory) {
+            Factories[platform] = factory ?? throw new ArgumentNullException(nameof(factory));
+        }
+
         internal static IServices GetServices(){
-            #pragma warning disable CA1416
+            if (Factories.TryGetValue(Config.Platform, out var factory))
+                return factory();
 
-            return Config.Platform switch {
-                Platform.WINDOWS => new WindowsServices(),
-                _ => throw new PlatformNotSupportedException($"'{Config.Platform}' is not supported.")
-            };
-
-            #pragma warning restore CA1416
+            throw new PlatformNotSupportedException($"'{Config.Platform}' is not supported.");
         }
     }
 }

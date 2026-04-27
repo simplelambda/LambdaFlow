@@ -1,0 +1,33 @@
+.container {
+    margin: 0 auto;
+    max-width: 72rem;
+    padding: 0 2rem;
+}
+
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.gap-1 {
+    gap: 0.5rem;
+}
+
+.gap-2 {
+    gap: 1rem;
+}
+
+.w-full {
+    width: 100%;
+}

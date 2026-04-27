@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lambdaflow.dev/ontology/lambdaflow.ontology.v1.schema.json",
+  "title": "LambdaFlow Ontology v1",
+  "description": "Schema for LambdaFlow message envelopes and optional typed Entity v1 payloads.",
+  "$defs": {
+    "entity": {
+      "type": "object",
+      "required": [
+        "$type",
+        "$v",
+        "data"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Domain type identifier, for example animals.dog"
+        },
+        "$v": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Entity schema version"
+        },
+        "data": {
+          "description": "Entity payload"
+        }
+      },
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Routing key"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Request/response correlation id"
+        },
+        "payload": {
+          "description": "Application payload",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/entity"
+            },
+            {}
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$ref": "#/$defs/message"
+}

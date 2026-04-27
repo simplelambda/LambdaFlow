@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Describe a Dog - LambdaFlow</title>
+    <link rel="stylesheet" href="../styles/style.css" />
+    <script src="../lambdaflow.js"></script>
+</head>
+<body class="bg-light text-dark font-sans">
+    <main class="container py-6">
+        <header class="hero mb-6">
+            <h1 class="heading">Describe a Dog</h1>
+            <p class="subheading">A typed entity demo using the universal ontology wrapper</p>
+        </header>
+
+        <section class="flex flex-col gap-2">
+            <input id="name"  type="text"   class="p-2 border rounded" placeholder="Name (e.g., Rex)"  />
+            <input id="age"   type="number" class="p-2 border rounded" placeholder="Age in years"      min="0" />
+            <input id="breed" type="text"   class="p-2 border rounded" placeholder="Breed (e.g., Labrador)" />
+            <button id="go" class="btn btn-primary">Describe</button>
+            <pre id="output" class="p-4 border rounded bg-white"></pre>
+            <a href="/index.html" class="btn btn-outline mt-4">Back</a>
+        </section>
+
+        <script>
+            document.getElementById('go').addEventListener('click', async () => {
+                const dog = {
+                    name:  document.getElementById('name').value,
+                    age:   parseInt(document.getElementById('age').value, 10) || 0,
+                    breed: document.getElementById('breed').value
+                };
+
+                const descEntity = await LambdaFlow.requestEntity('describeDog', 'animals.dog', dog);
+                const desc       = LambdaFlow.unwrapEntity(descEntity);
+                document.getElementById('output').textContent =
+                    `${desc.greeting}\n\n` +
+                    `Age in dog years: ${desc.ageInDogYears}\n` +
+                    `Is puppy: ${desc.isPuppy ? 'yes' : 'no'}`;
+            });
+        </script>
+    </main>
+</body>
+</html>
