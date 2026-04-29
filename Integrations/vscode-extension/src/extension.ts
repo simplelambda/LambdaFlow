@@ -1,15 +1,18 @@
 import * as vscode from 'vscode';
 import * as path   from 'path';
 import * as fs     from 'fs';
+import * as os     from 'os';
+import * as cp     from 'child_process';
 import { LambdaFlowConfigEditorProvider } from './ConfigEditorPanel';
 import { SidebarProvider }               from './SidebarProvider';
 import { resolveFrameworkPath, cliProjectPath } from './utils';
 
+const REPO_URL = 'https://github.com/simplelambda/LambdaFlow.git';
+
 interface LanguageTemplate {
-    label:            string;
-    cliValue:         'csharp' | 'java' | 'python';
-    compileCommand:   string;
-    compileDirectory: string;
+    label:    string;
+    cliValue: 'csharp' | 'java' | 'python';
+    detail:   string;
 }
 
 interface LanguageTemplatePickItem extends vscode.QuickPickItem {
@@ -17,24 +20,9 @@ interface LanguageTemplatePickItem extends vscode.QuickPickItem {
 }
 
 const LANGUAGE_TEMPLATES: LanguageTemplate[] = [
-    {
-        label:            'C#',
-        cliValue:         'csharp',
-        compileCommand:   'dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin',
-        compileDirectory: 'bin'
-    },
-    {
-        label:            'Java',
-        cliValue:         'java',
-        compileCommand:   'mvn -q -DskipTests package',
-        compileDirectory: 'target'
-    },
-    {
-        label:            'Python',
-        cliValue:         'python',
-        compileCommand:   'python build.py',
-        compileDirectory: 'bin'
-    }
+    { label: 'C#',     cliValue: 'csharp',  detail: '.NET / C# backend'  },
+    { label: 'Java',   cliValue: 'java',    detail: 'Maven / Java backend' },
+    { label: 'Python', cliValue: 'python',  detail: 'Python backend'      }
 ];
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -45,6 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
         LambdaFlowConfigEditorProvider.register(context),
         vscode.commands.registerCommand('lambdaflow.newProject',   () => cmdNewProject()),
         vscode.commands.registerCommand('lambdaflow.buildProject', () => cmdBuildProject()),
+        vscode.commands.registerCommand('lambdaflow.runProject',   () => cmdRunProject()),
         vscode.commands.registerCommand('lambdaflow.openConfig',   () => cmdOpenConfig())
     );
 }
@@ -80,42 +69,11 @@ async function cmdNewProject(): Promise<void> {
     });
     if (!targetDir) return;
 
-    const compileCommand = await vscode.window.showInputBox({
-        title:       'LambdaFlow — New Project',
-        prompt:      `Backend compile command (${template.label})`,
-        value:       template.compileCommand,
-        validateInput: v => {
-            if (v.trim() === '') return 'Compile command is required.';
-            if (v.includes('"')) return 'Double quotes are not supported in this prompt.';
-            return undefined;
-        }
-    });
-    if (!compileCommand) return;
-
-    const compileDirectory = await vscode.window.showInputBox({
-        title:       'LambdaFlow — New Project',
-        prompt:      `Backend compile output directory (${template.label})`,
-        value:       template.compileDirectory,
-        validateInput: v => {
-            if (v.trim() === '') return 'Compile directory is required.';
-            if (v.includes('"')) return 'Double quotes are not supported in this prompt.';
-            return undefined;
-        }
-    });
-    if (!compileDirectory) return;
-
     const cli      = cliProjectPath(frameworkPath);
     const terminal = vscode.window.createTerminal({ name: 'LambdaFlow' });
     terminal.show();
-    const command = [
-        `dotnet run --project ${q(cli)} -- new ${q(appName)} ${q(targetDir)} --framework ${q(frameworkPath)}`,
-        `--language ${q(template.cliValue)}`,
-        `--backend-compile-command ${q(compileCommand)}`,
-        `--backend-compile-directory ${q(compileDirectory)}`,
-        '--self-contained'
-    ].join(' ');
     terminal.sendText(
-        command
+        `dotnet run --project ${q(cli)} -- new ${q(appName)} ${q(targetDir)} --framework ${q(frameworkPath)} --language ${q(template.cliValue)} --self-contained`
     );
 
     const action = await vscode.window.showInformationMessage(
@@ -150,6 +108,69 @@ async function cmdBuildProject(): Promise<void> {
     );
 }
 
+async function cmdRunProject(): Promise<void> {
+    const projectDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!projectDir) {
+        vscode.window.showErrorMessage('LambdaFlow: No workspace folder is open.');
+        return;
+    }
+
+    const configPath = path.join(projectDir, 'config.json');
+    if (!fs.existsSync(configPath)) {
+        vscode.window.showErrorMessage('LambdaFlow: config.json not found. Open a LambdaFlow project folder.');
+        return;
+    }
+
+    const frameworkPath = await requireFrameworkPath();
+    if (!frameworkPath) return;
+
+    let cfg: { appName?: unknown; appVersion?: unknown };
+    try   { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8')); }
+    catch { vscode.window.showErrorMessage('LambdaFlow: Failed to parse config.json.'); return; }
+
+    const appName    = String(cfg.appName    ?? 'App');
+    const appVersion = String(cfg.appVersion ?? '1.0.0');
+    const sanitized  = sanitizeFileName(appName);
+    const appDir     = path.join(projectDir, 'Results', `${sanitized}-${sanitizeFileName(appVersion)}`, 'windows-x64');
+    const exePath    = path.join(appDir, `${sanitized}.exe`);
+
+    const cli       = cliProjectPath(frameworkPath);
+    const buildTask = new vscode.Task(
+        { type: 'shell', task: 'LambdaFlow: build' },
+        vscode.workspace.workspaceFolders![0],
+        'LambdaFlow: build app',
+        'LambdaFlow',
+        new vscode.ShellExecution(
+            `dotnet run --project "${cli}" -- build "${projectDir}" --framework "${frameworkPath}"`
+        )
+    );
+
+    const execution = await vscode.tasks.executeTask(buildTask);
+
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const disposable = vscode.tasks.onDidEndTaskProcess(e => {
+                if (e.execution === execution) {
+                    disposable.dispose();
+                    if (e.exitCode === 0) resolve();
+                    else reject(new Error(`Build failed (exit code ${e.exitCode ?? '?'})`));
+                }
+            });
+        });
+    } catch (err) {
+        vscode.window.showErrorMessage(`LambdaFlow: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+    }
+
+    if (!fs.existsSync(exePath)) {
+        vscode.window.showErrorMessage(`LambdaFlow: Executable not found at ${exePath}`);
+        return;
+    }
+
+    cp.spawn(exePath, [], { detached: true, stdio: 'ignore', cwd: appDir }).unref();
+    vscode.window.showInformationMessage(`LambdaFlow: ${appName} started.`);
+}
+
 async function cmdOpenConfig(): Promise<void> {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
@@ -176,30 +197,73 @@ async function requireFrameworkPath(): Promise<string | undefined> {
     const resolved = resolveFrameworkPath();
     if (resolved) return resolved;
 
-    const action = await vscode.window.showErrorMessage(
-        'LambdaFlow: framework not found. Set "lambdaflow.frameworkPath" in Settings, or open a self-contained project.',
-        'Open Settings'
+    const action = await vscode.window.showInformationMessage(
+        'LambdaFlow: framework not found. Download it automatically?',
+        'Download',
+        'Set Path Manually'
     );
-    if (action === 'Open Settings') {
+    if (action === 'Download')        return downloadFramework();
+    if (action === 'Set Path Manually')
         vscode.commands.executeCommand('workbench.action.openSettings', 'lambdaflow.frameworkPath');
-    }
     return undefined;
+}
+
+async function downloadFramework(): Promise<string | undefined> {
+    const appData   = process.env['APPDATA'] ?? path.join(os.homedir(), 'AppData', 'Roaming');
+    const targetDir = path.join(appData, 'LambdaFlow', 'framework');
+    const indicator = path.join(targetDir, 'lambdaflow', 'Hosts', 'Windows', 'lambdaflow.windows.csproj');
+
+    if (fs.existsSync(indicator)) {
+        await vscode.workspace.getConfiguration('lambdaflow')
+            .update('frameworkPath', targetDir, vscode.ConfigurationTarget.Global);
+        return targetDir;
+    }
+
+    return vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'LambdaFlow: Downloading framework…', cancellable: false },
+        async () => {
+            try {
+                fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+                if (fs.existsSync(targetDir))
+                    fs.rmSync(targetDir, { recursive: true, force: true });
+
+                await new Promise<void>((resolve, reject) => {
+                    const child = cp.spawn('git', ['clone', '--depth=1', REPO_URL, targetDir], { stdio: 'pipe' });
+                    child.on('close', code => (code === 0 ? resolve() : reject(new Error(`git clone exited ${code}`))));
+                    child.on('error', reject);
+                });
+
+                await vscode.workspace.getConfiguration('lambdaflow')
+                    .update('frameworkPath', targetDir, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage(`LambdaFlow framework downloaded to ${targetDir}`);
+                return targetDir;
+            } catch (err) {
+                vscode.window.showErrorMessage(
+                    `LambdaFlow: Failed to download framework — ${err instanceof Error ? err.message : String(err)}`
+                );
+                return undefined;
+            }
+        }
+    );
 }
 
 async function pickLanguageTemplate(): Promise<LanguageTemplate | undefined> {
     const items: LanguageTemplatePickItem[] = LANGUAGE_TEMPLATES.map(template => ({
-        label:       template.label,
-        description: 'Backend template language',
-        detail:      `Compile: ${template.compileCommand} | Output: ${template.compileDirectory}`,
+        label:    template.label,
+        detail:   template.detail,
         template
     }));
 
     const selected = await vscode.window.showQuickPick(items, {
         title:       'LambdaFlow — New Project',
-        placeHolder: 'Choose backend language template'
+        placeHolder: 'Choose backend language'
     });
 
     return selected?.template;
+}
+
+function sanitizeFileName(value: string): string {
+    return value.replace(/[<>:"/\\|?*]/g, '-');
 }
 
 function q(value: string): string {

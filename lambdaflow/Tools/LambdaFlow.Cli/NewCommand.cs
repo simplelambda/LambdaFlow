@@ -54,6 +54,7 @@ internal static class NewCommand
 
         CreateVsCodeTasks(projectDir, frameworkRoot, selfContained);
         CreateVsCodeLaunch(projectDir, appName);
+        CreateVsCodeSettings(projectDir);
 
         Console.WriteLine($"LambdaFlow project created at: {projectDir}");
         Console.WriteLine($"Template language: {LanguageDisplayName(language)}");
@@ -397,6 +398,7 @@ internal static class NewCommand
     }
 
     private static void CreateVsCodeLaunch(string projectDir, string appName) {
+        var sanitized = SanitizeFileName(appName);
         FileSystemTools.WriteFile(Path.Combine(projectDir, ".vscode", "launch.json"), $$"""
         {
           "version": "0.2.0",
@@ -406,14 +408,34 @@ internal static class NewCommand
               "type": "coreclr",
               "request": "launch",
               "preLaunchTask": "LambdaFlow: build app",
-              "program": "${workspaceFolder}/Results/{{appName}}-1.0.0/windows-x64/lambdaflow.windows.exe",
+              "program": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/windows-x64/{{sanitized}}.exe",
               "args": [],
-              "cwd": "${workspaceFolder}/Results/{{appName}}-1.0.0/windows-x64",
+              "cwd": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/windows-x64",
               "console": "internalConsole",
               "stopAtEntry": false
             }
           ]
         }
         """);
+    }
+
+    private static void CreateVsCodeSettings(string projectDir) {
+        FileSystemTools.WriteFile(Path.Combine(projectDir, ".vscode", "settings.json"), """
+        {
+          "files.exclude": {
+            "**/bin":         true,
+            "**/obj":         true,
+            "**/target":      true,
+            "**/__pycache__": true,
+            "**/Results":     true
+          }
+        }
+        """);
+    }
+
+    private static string SanitizeFileName(string value) {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars   = value.Select(ch => invalid.Contains(ch) ? '-' : ch).ToArray();
+        return new string(chars);
     }
 }

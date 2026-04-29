@@ -242,6 +242,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 _view.CoreWebView2.AddWebResourceRequestedFilter($"{AppOrigin}/*", CoreWebView2WebResourceContext.All);
                 _view.CoreWebView2.WebResourceRequested += HandlePakRequest;
 
+                await ipcBridge.WaitUntilReadyAsync();
                 Navigate(Config.FrontendInitialHTML ?? "index.html");
             }
 

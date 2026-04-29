@@ -73,6 +73,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             case 'newProject':  vscode.commands.executeCommand('lambdaflow.newProject');   break;
             case 'editConfig':  vscode.commands.executeCommand('lambdaflow.openConfig');   break;
             case 'build':       vscode.commands.executeCommand('lambdaflow.buildProject'); break;
+            case 'run':         vscode.commands.executeCommand('lambdaflow.runProject');   break;
         }
     }
 
@@ -93,6 +94,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     </div>
                     <button class="secondary" id="btnEditConfig">Edit Configuration</button>
                     <button class="secondary" id="btnBuild">Build</button>
+                    <button id="btnRun">&#9654; Run</button>
                 </div>`
             : /* html */`
                 <div class="empty">
@@ -255,6 +257,7 @@ ${projectSection}
   document.getElementById('btnNewProject').addEventListener('click', () => post('newProject'));
   document.getElementById('btnEditConfig')?.addEventListener('click', () => post('editConfig'));
   document.getElementById('btnBuild')?.addEventListener('click', () => post('build'));
+  document.getElementById('btnRun')?.addEventListener('click', () => post('run'));
 </script>
 </body>
 </html>`;

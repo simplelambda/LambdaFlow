@@ -61,6 +61,24 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 await _sendQueue.Writer.WriteAsync(message, _cts.Token).ConfigureAwait(false);
             }
 
+            public async Task WaitUntilReadyAsync(CancellationToken ct = default) {
+                if (!_initialized)
+                    throw new InvalidOperationException("IPCBridge not inicialized.");
+
+                if (Config.IpcTransport != IPCTransport.NamedPipe)
+                    return;
+
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                using var linked  = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+
+                try {
+                    await _pipeWriterSource.Task.WaitAsync(linked.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested) {
+                    throw new TimeoutException("Backend did not connect to the LambdaFlow named pipe within 10 seconds.");
+                }
+            }
+
             public void Dispose(){
                 _cts.Cancel();
 

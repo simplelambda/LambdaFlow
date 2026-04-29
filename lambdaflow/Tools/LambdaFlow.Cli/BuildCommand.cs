@@ -37,6 +37,11 @@ internal static class BuildCommand
             "-o",
             appDir);
 
+        var defaultExe = Path.Combine(appDir, "lambdaflow.windows.exe");
+        var targetExe  = Path.Combine(appDir, $"{Sanitize(config.AppName)}.exe");
+        if (File.Exists(defaultExe) && !string.Equals(defaultExe, targetExe, StringComparison.OrdinalIgnoreCase))
+            File.Move(defaultExe, targetExe, overwrite: true);
+
         File.Copy(Path.Combine(projectDir, "config.json"), Path.Combine(appDir, "config.json"), overwrite: true);
         FileSystemTools.CreatePak(frontendDir, Path.Combine(appDir, "frontend.pak"));
         IntegrityManifestWriter.Write(appDir);

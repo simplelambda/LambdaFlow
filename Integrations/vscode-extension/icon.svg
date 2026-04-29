@@ -1,3 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-  <polygon points="12,2 1,22 5,22 12,7 19,22 23,22"/>
-</svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="440"
+   height="440"
+   viewBox="0 0 116.41666 116.41668"
+   version="1.1"
+   id="svg1"
+   xml:space="preserve"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+     id="defs1" /><g
+     id="layer1"
+     transform="translate(-9.524998,-9.5249985)"><path
+       id="path1"
+       style="fill:#000000;stroke-width:0.264583"
+       d="m 39.959056,12.43101 c -0.0142,5.5e-4 0.0241,-0.0107 12.86795,29.400271 -35.72442,81.206399 0.001,0.0041 -35.72495,81.206419 h 16.45068 c 28.03724,-63.101362 10e-4,0.008 28.03963,-63.103652 27.675387,63.104092 -6.5e-4,9.8e-4 27.673247,63.103142 l 29.098997,-0.003 C 69.237613,12.434493 118.36373,123.0339 69.236343,12.433694 c 0,0 -29.123387,-0.0086 -29.277287,-0.0026 z" /></g></svg>

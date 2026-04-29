@@ -2,7 +2,7 @@
   "name": "lambdaflow",
   "displayName": "LambdaFlow",
   "description": "Build desktop apps with a web frontend and any backend language.",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "publisher": "simplelambda",
   "engines": {
     "vscode": "^1.85.0"
@@ -35,17 +35,26 @@
       {
         "command": "lambdaflow.newProject",
         "title": "New Project",
-        "category": "LambdaFlow"
+        "category": "LambdaFlow",
+        "icon": "$(add)"
       },
       {
         "command": "lambdaflow.buildProject",
         "title": "Build",
-        "category": "LambdaFlow"
+        "category": "LambdaFlow",
+        "icon": "$(gear)"
       },
       {
         "command": "lambdaflow.openConfig",
         "title": "Edit Configuration",
-        "category": "LambdaFlow"
+        "category": "LambdaFlow",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "lambdaflow.runProject",
+        "title": "Build & Run",
+        "category": "LambdaFlow",
+        "icon": "$(debug-start)"
       }
     ],
     "customEditors": [
@@ -62,14 +71,26 @@
     ],
     "menus": {
       "commandPalette": [
+        { "command": "lambdaflow.newProject"   },
+        { "command": "lambdaflow.buildProject" },
+        { "command": "lambdaflow.openConfig"   },
+        { "command": "lambdaflow.runProject"   }
+      ],
+      "view/title": [
         {
-          "command": "lambdaflow.newProject"
+          "command": "lambdaflow.runProject",
+          "when": "view == lambdaflow.sidebar",
+          "group": "navigation@1"
         },
         {
-          "command": "lambdaflow.buildProject"
+          "command": "lambdaflow.buildProject",
+          "when": "view == lambdaflow.sidebar",
+          "group": "navigation@2"
         },
         {
-          "command": "lambdaflow.openConfig"
+          "command": "lambdaflow.newProject",
+          "when": "view == lambdaflow.sidebar",
+          "group": "navigation@3"
         }
       ]
     },
