@@ -4,6 +4,10 @@
 AGENTS.md
 CLAUDE.md
 
+.claude/
+.agent/
+.codex/
+
 # =========================
 # Build outputs
 # =========================
