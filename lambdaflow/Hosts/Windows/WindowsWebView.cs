@@ -21,6 +21,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             private const string AppHost = "app.lambdaflow.localhost";
             private const string AppOrigin = "https://" + AppHost;
             private const string FrontendContentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+            private static readonly object FrontendLogLock = new object();
 
             private WebView2? _view;
             private Form?     _host;
@@ -161,7 +162,8 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                     StartPosition = FormStartPosition.CenterScreen,
                     Width         = Config.Window.Width,
                     Height        = Config.Window.Height,
-                    MinimumSize   = new Size(Config.Window.MinWidth, Config.Window.MinHeight)
+                    MinimumSize   = new Size(Config.Window.MinWidth, Config.Window.MinHeight),
+                    KeyPreview    = true
                 };
 
                 if (Config.Window.MaxWidth > 0 && Config.Window.MaxHeight > 0)
@@ -170,6 +172,13 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 _host.FormClosed += (_, _) => {
                     _pak?.Dispose();
                     ipcBridge.Dispose();
+                };
+
+                _host.KeyDown += (_, e) => {
+                    if (e.KeyCode == Keys.F12 && Config.DebugMode) {
+                        _view?.CoreWebView2?.OpenDevToolsWindow();
+                        e.Handled = true;
+                    }
                 };
 
                 try {
@@ -225,7 +234,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 _view.CoreWebView2.WebMessageReceived += async (_, e) => {
                     var msg = e.TryGetWebMessageAsString();
                     try {
-                        await ipcBridge.SendMessageToBackend(msg);
+                        await HandleFrontendMessageAsync(msg, ipcBridge);
                     }
                     catch (Exception ex) {
                         Console.Error.WriteLine($"Error sending message to backend: {ex}");
@@ -244,6 +253,9 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
                 await ipcBridge.WaitUntilReadyAsync();
                 Navigate(Config.FrontendInitialHTML ?? "index.html");
+
+                if (Config.DebugMode && Config.Debug.OpenFrontendDevToolsOnStart)
+                    _view.CoreWebView2.OpenDevToolsWindow();
             }
 
             private async Task BindFrontendMethods() {
@@ -256,6 +268,118 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                             console.warn('LambdaFlow: receive(msg) not implemented.');
                         };
                     ");
+
+                if (Config.Debug.Enabled && Config.Debug.CaptureFrontendConsole) {
+                    await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                        (function () {
+                            if (window.__lambdaFlowConsoleCaptureInstalled) return;
+                            window.__lambdaFlowConsoleCaptureInstalled = true;
+
+                            function serialize(value) {
+                                if (value instanceof Error) return value.stack || value.message;
+                                if (typeof value === 'string') return value;
+                                try { return JSON.stringify(value); }
+                                catch (_) { return String(value); }
+                            }
+
+                            function sendLog(level, args) {
+                                try {
+                                    window.chrome.webview.postMessage(JSON.stringify({
+                                        kind: '__console',
+                                        payload: {
+                                            level: level,
+                                            message: Array.prototype.slice.call(args).map(serialize).join(' '),
+                                            timestamp: new Date().toISOString(),
+                                            source: 'frontend'
+                                        }
+                                    }));
+                                }
+                                catch (_) { }
+                            }
+
+                            ['log', 'warn', 'error', 'info', 'debug'].forEach(function (level) {
+                                var original = console[level] ? console[level].bind(console) : console.log.bind(console);
+                                console[level] = function () {
+                                    original.apply(console, arguments);
+                                    sendLog(level, arguments);
+                                };
+                            });
+
+                            window.addEventListener('error', function (event) {
+                                sendLog('error', [
+                                    event.message + ' at ' + event.filename + ':' + event.lineno + ':' + event.colno
+                                ]);
+                            });
+
+                            window.addEventListener('unhandledrejection', function (event) {
+                                sendLog('error', ['Unhandled promise rejection:', event.reason]);
+                            });
+                        })();
+                    ");
+                }
+            }
+
+            private async Task HandleFrontendMessageAsync(string message, IIPCBridge ipcBridge) {
+                if (TryHandleInternalFrontendMessage(message))
+                    return;
+
+                await ipcBridge.SendMessageToBackend(message);
+            }
+
+            private bool TryHandleInternalFrontendMessage(string message) {
+                try {
+                    using var document = JsonDocument.Parse(message);
+                    var root = document.RootElement;
+
+                    if (!root.TryGetProperty("kind", out var kind)
+                        || kind.GetString() != "__console")
+                        return false;
+
+                    if (!Config.Debug.Enabled || !Config.Debug.CaptureFrontendConsole)
+                        return true;
+
+                    var payload = root.TryGetProperty("payload", out var value)
+                        ? value
+                        : default;
+
+                    var level = payload.ValueKind == JsonValueKind.Object
+                        && payload.TryGetProperty("level", out var levelValue)
+                            ? levelValue.GetString() ?? "log"
+                            : "log";
+
+                    var text = payload.ValueKind == JsonValueKind.Object
+                        && payload.TryGetProperty("message", out var messageValue)
+                            ? messageValue.GetString() ?? ""
+                            : "";
+
+                    var timestamp = payload.ValueKind == JsonValueKind.Object
+                        && payload.TryGetProperty("timestamp", out var timestampValue)
+                            ? timestampValue.GetString() ?? DateTime.Now.ToString("O")
+                            : DateTime.Now.ToString("O");
+
+                    var line = $"[{timestamp}] frontend {level}: {text}";
+                    if (string.Equals(level, "error", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(level, "warn", StringComparison.OrdinalIgnoreCase))
+                        Console.Error.WriteLine(line);
+                    else
+                        Console.WriteLine(line);
+
+                    WriteFrontendDebugLog(line);
+                    return true;
+                }
+                catch (JsonException) {
+                    return false;
+                }
+            }
+
+            private static void WriteFrontendDebugLog(string line) {
+                try {
+                    var logPath = Path.Combine(AppContext.BaseDirectory, "lambdaflow.frontend.log");
+                    lock (FrontendLogLock) {
+                        File.AppendAllText(logPath, line + Environment.NewLine);
+                    }
+                }
+                catch { }
             }
 
             private string? DetermineFastResolverArgs() {

@@ -15,6 +15,11 @@ public class Backend {
         public TextResponse(String text) { this.text = text; }
     }
 
+    public static class PingResponse {
+        public final String status;
+        public PingResponse(String status) { this.status = status; }
+    }
+
     public static class NumberConvertRequest {
         public String mode;
         public String value;
@@ -56,6 +61,8 @@ public class Backend {
     // -- Handlers -------------------------------------------------------
 
     public static void main(String[] args) {
+        LambdaFlow.receive("backend.ping", Object.class, req -> new PingResponse("pong"));
+
         LambdaFlow.receive("uppercase", TextRequest.class, req -> new TextResponse(req.text.toUpperCase()));
         LambdaFlow.receive("lowercase", TextRequest.class, req -> new TextResponse(req.text.toLowerCase()));
         LambdaFlow.receive("reverse",   TextRequest.class, req -> new TextResponse(new StringBuilder(req.text).reverse().toString()));

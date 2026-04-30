@@ -2,7 +2,7 @@
   "name": "lambdaflow",
   "displayName": "LambdaFlow",
   "description": "Build desktop apps with a web frontend and any backend language.",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "publisher": "simplelambda",
   "engines": {
     "vscode": "^1.85.0"
@@ -55,6 +55,12 @@
         "title": "Build & Run",
         "category": "LambdaFlow",
         "icon": "$(debug-start)"
+      },
+      {
+        "command": "lambdaflow.debugProject",
+        "title": "Build & Debug",
+        "category": "LambdaFlow",
+        "icon": "$(debug-alt)"
       }
     ],
     "customEditors": [
@@ -74,7 +80,8 @@
         { "command": "lambdaflow.newProject"   },
         { "command": "lambdaflow.buildProject" },
         { "command": "lambdaflow.openConfig"   },
-        { "command": "lambdaflow.runProject"   }
+        { "command": "lambdaflow.runProject"   },
+        { "command": "lambdaflow.debugProject" }
       ],
       "view/title": [
         {
@@ -83,14 +90,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "lambdaflow.buildProject",
+          "command": "lambdaflow.debugProject",
           "when": "view == lambdaflow.sidebar",
           "group": "navigation@2"
         },
         {
-          "command": "lambdaflow.newProject",
+          "command": "lambdaflow.buildProject",
           "when": "view == lambdaflow.sidebar",
           "group": "navigation@3"
+        },
+        {
+          "command": "lambdaflow.newProject",
+          "when": "view == lambdaflow.sidebar",
+          "group": "navigation@4"
         }
       ]
     },

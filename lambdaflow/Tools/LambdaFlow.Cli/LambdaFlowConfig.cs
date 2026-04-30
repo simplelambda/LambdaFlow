@@ -26,6 +26,12 @@ internal sealed class LambdaFlowConfig
     [JsonPropertyName("frontendInitialHTML")]
     public string FrontendInitialHTML { get; set; } = "index.html";
 
+    [JsonPropertyName("build")]
+    public BuildConfig Build { get; set; } = new BuildConfig();
+
+    [JsonPropertyName("debug")]
+    public DebugConfig Debug { get; set; } = new DebugConfig();
+
     [JsonPropertyName("platforms")]
     public Dictionary<string, PlatformConfig> Platforms { get; set; } = new Dictionary<string, PlatformConfig>();
 
@@ -38,6 +44,54 @@ internal sealed class LambdaFlowConfig
 
         return x64;
     }
+}
+
+internal sealed class BuildConfig
+{
+    [JsonPropertyName("preBuild")]
+    public List<PreBuildCommandConfig> PreBuild { get; set; } = new List<PreBuildCommandConfig>();
+}
+
+internal sealed class PreBuildCommandConfig
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("command")]
+    public string Command { get; set; } = "";
+
+    [JsonPropertyName("workingDirectory")]
+    public string WorkingDirectory { get; set; } = "";
+
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [JsonPropertyName("continueOnError")]
+    public bool ContinueOnError { get; set; } = false;
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int? TimeoutSeconds { get; set; }
+}
+
+internal sealed class DebugConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = false;
+
+    [JsonPropertyName("frontendDevTools")]
+    public bool FrontendDevTools { get; set; } = false;
+
+    [JsonPropertyName("openFrontendDevToolsOnStart")]
+    public bool OpenFrontendDevToolsOnStart { get; set; } = false;
+
+    [JsonPropertyName("captureFrontendConsole")]
+    public bool CaptureFrontendConsole { get; set; } = false;
+
+    [JsonPropertyName("showBackendConsole")]
+    public bool ShowBackendConsole { get; set; } = false;
+
+    [JsonPropertyName("backendLogLevel")]
+    public string BackendLogLevel { get; set; } = "info";
 }
 
 internal sealed class PlatformConfig

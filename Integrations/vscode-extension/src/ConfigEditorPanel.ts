@@ -19,6 +19,28 @@ interface ArchConfig {
     compileDirectory: string;
 }
 
+interface DebugConfig {
+    enabled:                  boolean;
+    frontendDevTools:         boolean;
+    openFrontendDevToolsOnStart: boolean;
+    captureFrontendConsole:   boolean;
+    showBackendConsole:       boolean;
+    backendLogLevel:          string;
+}
+
+interface PreBuildCommandConfig {
+    name?:            string;
+    command:          string;
+    workingDirectory: string;
+    enabled?:         boolean;
+    continueOnError?: boolean;
+    timeoutSeconds?:  number | null;
+}
+
+interface BuildConfig {
+    preBuild: PreBuildCommandConfig[];
+}
+
 interface LambdaFlowConfig {
     appName:                   string;
     appVersion:                string;
@@ -31,6 +53,8 @@ interface LambdaFlowConfig {
     developmentBackendFolder:  string;
     developmentFrontendFolder: string;
     window:                    WindowConfig;
+    build?:                    BuildConfig;
+    debug?:                    DebugConfig;
     platforms: {
         windows?: { archs: { x64?: ArchConfig } };
         [key: string]: unknown;
@@ -111,6 +135,8 @@ function buildHtml(config: LambdaFlowConfig): string {
     const nonce = crypto.randomBytes(16).toString('hex');
     const csp   = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
     const x64   = config.platforms?.windows?.archs?.x64 ?? { compileCommand: '', compileDirectory: 'bin' };
+    const debug = normalizeDebug(config.debug);
+    const preBuild = normalizePreBuild(config.build);
 
     return /* html */`<!DOCTYPE html>
 <html lang="en">
@@ -188,6 +214,44 @@ function buildHtml(config: LambdaFlowConfig): string {
   }
 
   input:focus, select:focus { border-color: var(--vscode-focusBorder); }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+  }
+
+  .check input { margin: 0; }
+
+  .prebuild-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .prebuild-item {
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    padding: 10px;
+  }
+
+  .prebuild-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .prebuild-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .prebuild-actions button {
+    width: auto;
+    padding: 5px 10px;
+  }
 
   .grid-2 {
     display: grid;
@@ -330,6 +394,16 @@ function buildHtml(config: LambdaFlowConfig): string {
     <p class="hint">Relative to project root. Packed into <code>frontend.pak</code> at build time.</p>
   </div>
 
+  <h2>Pre-build Commands</h2>
+
+  <div id="preBuildList" class="prebuild-list">
+    ${renderPreBuildItems(preBuild)}
+  </div>
+  <p class="hint">Commands run in order before backend compilation and frontend packaging.</p>
+  <div class="actions" style="margin-top:10px;padding-top:10px">
+    <button type="button" class="secondary" id="btnAddPreBuild">Add Command</button>
+  </div>
+
   <h2>Backend</h2>
 
   <div class="field">
@@ -373,6 +447,38 @@ function buildHtml(config: LambdaFlowConfig): string {
     <p class="hint">Only Hardened mode is supported. SHA-256 integrity check runs before every launch.</p>
   </div>
 
+  <h2>Debug</h2>
+
+  <label class="check">
+    <input type="checkbox" name="debugEnabled" ${debug.enabled ? 'checked' : ''}>
+    Enable debug mode
+  </label>
+
+  <label class="check">
+    <input type="checkbox" name="debugFrontendDevTools" ${debug.frontendDevTools ? 'checked' : ''}>
+    Enable WebView DevTools
+  </label>
+
+  <label class="check">
+    <input type="checkbox" name="debugOpenFrontendDevToolsOnStart" ${debug.openFrontendDevToolsOnStart ? 'checked' : ''}>
+    Open DevTools on start
+  </label>
+
+  <label class="check">
+    <input type="checkbox" name="debugCaptureFrontendConsole" ${debug.captureFrontendConsole ? 'checked' : ''}>
+    Capture frontend console
+  </label>
+
+  <label class="check">
+    <input type="checkbox" name="debugShowBackendConsole" ${debug.showBackendConsole ? 'checked' : ''}>
+    Show backend console/logs
+  </label>
+
+  <div class="field">
+    <label>Backend Log Level</label>
+    <input type="text" name="debugBackendLogLevel" value="${e(debug.backendLogLevel)}">
+  </div>
+
   <h2>Output</h2>
 
   <div class="field">
@@ -397,12 +503,19 @@ function buildHtml(config: LambdaFlowConfig): string {
   });
 
   document.getElementById('btnReset').addEventListener('click', () => populate(original));
+  document.getElementById('btnAddPreBuild').addEventListener('click', () => appendPreBuildCommand({ enabled: true, command: '', workingDirectory: '' }));
+  document.getElementById('preBuildList').addEventListener('click', ev => {
+    if (ev.target?.dataset?.action === 'remove-prebuild') {
+      ev.target.closest('.prebuild-item')?.remove();
+    }
+  });
 
   document.getElementById('form').addEventListener('submit', ev => {
     ev.preventDefault();
     const f   = document.getElementById('form');
     const get = name => f.elements[name]?.value ?? '';
     const num = name => parseInt(get(name), 10) || 0;
+    const checked = name => !!f.elements[name]?.checked;
 
     const updated = {
       ...original,
@@ -416,6 +529,19 @@ function buildHtml(config: LambdaFlowConfig): string {
       ipcTransport:              get('ipcTransport'),
       securityMode:              'Hardened',
       resultFolder:              get('resultFolder'),
+      build: {
+        ...(original.build ?? {}),
+        preBuild: collectPreBuild()
+      },
+      debug: {
+        ...(original.debug ?? {}),
+        enabled:                  checked('debugEnabled'),
+        frontendDevTools:         checked('debugFrontendDevTools'),
+        openFrontendDevToolsOnStart: checked('debugOpenFrontendDevToolsOnStart'),
+        captureFrontendConsole:   checked('debugCaptureFrontendConsole'),
+        showBackendConsole:       checked('debugShowBackendConsole'),
+        backendLogLevel:          get('debugBackendLogLevel') || 'info'
+      },
       window: {
         ...original.window,
         title:     get('windowTitle'),
@@ -447,6 +573,9 @@ function buildHtml(config: LambdaFlowConfig): string {
   function populate(cfg) {
     const f   = document.getElementById('form');
     const set = (name, val) => { const el = f.elements[name]; if (el) el.value = val; };
+    const setChecked = (name, val) => { const el = f.elements[name]; if (el) el.checked = !!val; };
+    const debug = cfg.debug ?? {};
+    renderPreBuildList(cfg.build?.preBuild ?? []);
     set('appName',                   cfg.appName);
     set('appVersion',                cfg.appVersion);
     set('organizationName',          cfg.organizationName);
@@ -456,6 +585,12 @@ function buildHtml(config: LambdaFlowConfig): string {
     set('developmentBackendFolder',  cfg.developmentBackendFolder);
     set('ipcTransport',              cfg.ipcTransport);
     set('resultFolder',              cfg.resultFolder);
+    setChecked('debugEnabled', debug.enabled);
+    setChecked('debugFrontendDevTools', debug.frontendDevTools);
+    setChecked('debugOpenFrontendDevToolsOnStart', debug.openFrontendDevToolsOnStart);
+    setChecked('debugCaptureFrontendConsole', debug.captureFrontendConsole);
+    setChecked('debugShowBackendConsole', debug.showBackendConsole);
+    set('debugBackendLogLevel', debug.backendLogLevel ?? 'info');
     set('windowTitle',     cfg.window.title);
     set('windowWidth',     cfg.window.width);
     set('windowHeight',    cfg.window.height);
@@ -469,6 +604,58 @@ function buildHtml(config: LambdaFlowConfig): string {
       set('winX64CompileDirectory', x64.compileDirectory);
     }
   }
+
+  function renderPreBuildList(items) {
+    const list = document.getElementById('preBuildList');
+    list.innerHTML = '';
+    (items && items.length ? items : []).forEach(item => appendPreBuildCommand(item));
+  }
+
+  function appendPreBuildCommand(item) {
+    const list = document.getElementById('preBuildList');
+    const row = document.createElement('div');
+    row.className = 'prebuild-item';
+    row.innerHTML = [
+      '<div class="prebuild-row">',
+      '  <div class="field">',
+      '    <label>Name</label>',
+      '    <input type="text" data-field="name">',
+      '  </div>',
+      '  <div class="field">',
+      '    <label>Working Directory</label>',
+      '    <input type="text" data-field="workingDirectory" placeholder="frontend">',
+      '  </div>',
+      '</div>',
+      '<div class="field">',
+      '  <label>Command</label>',
+      '  <input type="text" data-field="command" placeholder="npm run build">',
+      '</div>',
+      '<div class="prebuild-actions">',
+      '  <label class="check"><input type="checkbox" data-field="enabled"> Enabled</label>',
+      '  <label class="check"><input type="checkbox" data-field="continueOnError"> Continue on error</label>',
+      '  <button type="button" class="secondary" data-action="remove-prebuild">Remove</button>',
+      '</div>'
+    ].join('');
+
+    row.querySelector('[data-field="name"]').value = item.name ?? '';
+    row.querySelector('[data-field="command"]').value = item.command ?? '';
+    row.querySelector('[data-field="workingDirectory"]').value = item.workingDirectory ?? '';
+    row.querySelector('[data-field="enabled"]').checked = item.enabled !== false;
+    row.querySelector('[data-field="continueOnError"]').checked = !!item.continueOnError;
+    list.appendChild(row);
+  }
+
+  function collectPreBuild() {
+    return Array.from(document.querySelectorAll('.prebuild-item'))
+      .map(row => ({
+        name: row.querySelector('[data-field="name"]').value,
+        command: row.querySelector('[data-field="command"]').value,
+        workingDirectory: row.querySelector('[data-field="workingDirectory"]').value,
+        enabled: row.querySelector('[data-field="enabled"]').checked,
+        continueOnError: row.querySelector('[data-field="continueOnError"]').checked
+      }))
+      .filter(item => item.command.trim() !== '' || item.workingDirectory.trim() !== '');
+  }
 </script>
 
 </body>
@@ -481,6 +668,46 @@ function errorHtml(): string {
             config.json has a JSON syntax error — fix it in the text editor first.
         </p>
     </body></html>`;
+}
+
+function normalizePreBuild(build: BuildConfig | undefined): PreBuildCommandConfig[] {
+    return build?.preBuild ?? [];
+}
+
+function renderPreBuildItems(items: PreBuildCommandConfig[]): string {
+    return items.map(item => /* html */`
+      <div class="prebuild-item">
+        <div class="prebuild-row">
+          <div class="field">
+            <label>Name</label>
+            <input type="text" data-field="name" value="${e(item.name ?? '')}">
+          </div>
+          <div class="field">
+            <label>Working Directory</label>
+            <input type="text" data-field="workingDirectory" value="${e(item.workingDirectory)}" placeholder="frontend">
+          </div>
+        </div>
+        <div class="field">
+          <label>Command</label>
+          <input type="text" data-field="command" value="${e(item.command)}" placeholder="npm run build">
+        </div>
+        <div class="prebuild-actions">
+          <label class="check"><input type="checkbox" data-field="enabled" ${item.enabled === false ? '' : 'checked'}> Enabled</label>
+          <label class="check"><input type="checkbox" data-field="continueOnError" ${item.continueOnError ? 'checked' : ''}> Continue on error</label>
+          <button type="button" class="secondary" data-action="remove-prebuild">Remove</button>
+        </div>
+      </div>`).join('');
+}
+
+function normalizeDebug(debug: DebugConfig | undefined): DebugConfig {
+    return {
+        enabled:                  debug?.enabled ?? false,
+        frontendDevTools:         debug?.frontendDevTools ?? false,
+        openFrontendDevToolsOnStart: debug?.openFrontendDevToolsOnStart ?? false,
+        captureFrontendConsole:   debug?.captureFrontendConsole ?? false,
+        showBackendConsole:       debug?.showBackendConsole ?? false,
+        backendLogLevel:          debug?.backendLogLevel ?? 'info'
+    };
 }
 
 function e(value: unknown): string {

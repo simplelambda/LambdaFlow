@@ -34,6 +34,27 @@ namespace lambdaflow.lambdaflow.Core
         public Dictionary<string, ArchConfig> Archs { get; set; } = new Dictionary<string, ArchConfig>();
     }
 
+    internal sealed class DebugConfig
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = false;
+
+        [JsonPropertyName("frontendDevTools")]
+        public bool FrontendDevTools { get; set; } = false;
+
+        [JsonPropertyName("openFrontendDevToolsOnStart")]
+        public bool OpenFrontendDevToolsOnStart { get; set; } = false;
+
+        [JsonPropertyName("captureFrontendConsole")]
+        public bool CaptureFrontendConsole { get; set; } = false;
+
+        [JsonPropertyName("showBackendConsole")]
+        public bool ShowBackendConsole { get; set; } = false;
+
+        [JsonPropertyName("backendLogLevel")]
+        public string BackendLogLevel { get; set; } = "info";
+    }
+
     internal sealed class AppConfig
     {
         [JsonPropertyName("appName")]
@@ -60,6 +81,9 @@ namespace lambdaflow.lambdaflow.Core
         [JsonPropertyName("window")]
         public WindowConfig Window { get; set; } = new WindowConfig();
 
+        [JsonPropertyName("debug")]
+        public DebugConfig Debug { get; set; } = new DebugConfig();
+
         [JsonPropertyName("platforms")]
         public Dictionary<string, PlatformConfig> Platforms { get; set; } = new Dictionary<string, PlatformConfig>();
     }
@@ -77,8 +101,9 @@ namespace lambdaflow.lambdaflow.Core
         internal static string FrontendInitialHTML => App.FrontendInitialHTML;
         internal static string AppIcon => App.AppIcon;
         internal static ArchConfig CurrentArch => GetCurrentArch();
+        internal static DebugConfig Debug => App.Debug ?? new DebugConfig();
 
-        internal const bool DebugMode = false;
+        internal static bool DebugMode => Debug.Enabled && Debug.FrontendDevTools;
         internal const string IntegrityManifestFile = "lambdaflow.integrity.json";
 
         internal static readonly SecurityMode SecurityMode = ParseSecurityMode(App.SecurityMode);

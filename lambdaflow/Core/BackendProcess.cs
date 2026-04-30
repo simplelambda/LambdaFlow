@@ -9,6 +9,7 @@ namespace lambdaflow.lambdaflow.Core{
         #region Variables
 
             private readonly Process _process;
+            private static readonly object LogLock = new object();
 
             internal event Func<string, Task>? OnStdOut;
             internal event Func<string, Task>? OnStdErr;
@@ -76,6 +77,10 @@ namespace lambdaflow.lambdaflow.Core{
                 var backendDir = Path.Combine(AppContext.BaseDirectory, "backend");
                 var arch       = Config.CurrentArch;
                 var command    = string.IsNullOrWhiteSpace(arch.RunCommand) ? "Backend.exe" : arch.RunCommand;
+                var visibleBackendConsole =
+                    Config.Debug.Enabled
+                    && Config.Debug.ShowBackendConsole
+                    && Config.IpcTransport == IPCTransport.NamedPipe;
 
                 // If the command exists inside backend/ use that path; otherwise fall back to PATH lookup.
                 var localPath = Path.Combine(backendDir, command);
@@ -84,11 +89,11 @@ namespace lambdaflow.lambdaflow.Core{
                 var psi = new ProcessStartInfo {
                     FileName               = fileName,
                     WorkingDirectory       = backendDir,
-                    RedirectStandardInput  = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
+                    RedirectStandardInput  = !visibleBackendConsole,
+                    RedirectStandardOutput = !visibleBackendConsole,
+                    RedirectStandardError  = !visibleBackendConsole,
                     UseShellExecute        = false,
-                    CreateNoWindow         = true
+                    CreateNoWindow         = !(Config.Debug.Enabled && Config.Debug.ShowBackendConsole)
                 };
                 foreach (var arg in arch.RunArgs)
                     psi.ArgumentList.Add(arg);
@@ -112,6 +117,8 @@ namespace lambdaflow.lambdaflow.Core{
             private void StdErrHandler(object sender, DataReceivedEventArgs e) {
                 if (e.Data is null) return;
 
+                WriteBackendDebugLog(e.Data);
+
                 var handler = OnStdErr;
                 if (handler is not null) {
                     _ = SafeInvokeAsync(handler, e.Data);
@@ -124,6 +131,19 @@ namespace lambdaflow.lambdaflow.Core{
             private static async Task SafeInvokeAsync(Func<string, Task> handler, string data) {
                 try {
                     await handler(data).ConfigureAwait(false);
+                }
+                catch { }
+            }
+
+            private static void WriteBackendDebugLog(string data) {
+                if (!Config.Debug.Enabled || !Config.Debug.ShowBackendConsole)
+                    return;
+
+                try {
+                    var logPath = Path.Combine(AppContext.BaseDirectory, "lambdaflow.backend.log");
+                    lock (LogLock) {
+                        File.AppendAllText(logPath, $"[{DateTime.Now:O}] {data}{Environment.NewLine}");
+                    }
                 }
                 catch { }
             }

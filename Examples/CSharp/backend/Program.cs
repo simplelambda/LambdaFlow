@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 
+LambdaFlow.Receive<object, PingResponse>("backend.ping", _ => new PingResponse("pong"));
+
 LambdaFlow.Receive<TextRequest, TextResponse>("uppercase", req => new TextResponse(req.Text.ToUpperInvariant()));
 LambdaFlow.Receive<TextRequest, TextResponse>("lowercase", req => new TextResponse(req.Text.ToLowerInvariant()));
 LambdaFlow.Receive<TextRequest, TextResponse>("reverse",   req => new TextResponse(Reverse(req.Text)));
@@ -97,6 +99,7 @@ static bool TryParseBinary(string value, out int result) {
 
 public record TextRequest(string Text);
 public record TextResponse(string Text);
+public record PingResponse(string Status);
 public record TextStatsResponse(int Characters, int CharactersNoSpaces, int Words, int Lines, bool IsPalindrome, string Normalized);
 public record NumberConvertRequest(string Mode, string Value);
 public record Dog(string Name, int Age, string Breed);

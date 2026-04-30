@@ -475,7 +475,9 @@ def run(
 
         _transport = transport or _open_transport()
 
-    if threaded:
+    effective_threaded = threaded and not isinstance(_transport, _PipeTransport)
+
+    if effective_threaded:
         _executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="lambdaflow")
     else:
         _executor = None

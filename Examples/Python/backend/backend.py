@@ -7,6 +7,11 @@ typed-object (Dog) demo.
 import lambdaflow as lf
 
 
+@lf.receive("backend.ping")
+def backend_ping(_):
+    return {"status": "pong"}
+
+
 # -- Text utilities -----------------------------------------------------
 
 @lf.receive("uppercase")

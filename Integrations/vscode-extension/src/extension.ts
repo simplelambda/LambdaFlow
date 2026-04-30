@@ -11,7 +11,7 @@ const REPO_URL = 'https://github.com/simplelambda/LambdaFlow.git';
 
 interface LanguageTemplate {
     label:    string;
-    cliValue: 'csharp' | 'java' | 'python';
+    cliValue: 'csharp' | 'java' | 'python' | 'other';
     detail:   string;
 }
 
@@ -19,10 +19,26 @@ interface LanguageTemplatePickItem extends vscode.QuickPickItem {
     template: LanguageTemplate;
 }
 
+interface FrontendTemplate {
+    label:    string;
+    cliValue: 'basic' | 'react';
+    detail:   string;
+}
+
+interface FrontendTemplatePickItem extends vscode.QuickPickItem {
+    template: FrontendTemplate;
+}
+
 const LANGUAGE_TEMPLATES: LanguageTemplate[] = [
     { label: 'C#',     cliValue: 'csharp',  detail: '.NET / C# backend'  },
     { label: 'Java',   cliValue: 'java',    detail: 'Maven / Java backend' },
-    { label: 'Python', cliValue: 'python',  detail: 'Python backend'      }
+    { label: 'Python', cliValue: 'python',  detail: 'Python backend'      },
+    { label: 'Other',  cliValue: 'other',   detail: 'Generic backend command configured manually' }
+];
+
+const FRONTEND_TEMPLATES: FrontendTemplate[] = [
+    { label: 'HTML basic', cliValue: 'basic', detail: 'Plain HTML/CSS/JS frontend' },
+    { label: 'React',      cliValue: 'react', detail: 'Vite React frontend with npm pre-build' }
 ];
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -33,7 +49,8 @@ export function activate(context: vscode.ExtensionContext): void {
         LambdaFlowConfigEditorProvider.register(context),
         vscode.commands.registerCommand('lambdaflow.newProject',   () => cmdNewProject()),
         vscode.commands.registerCommand('lambdaflow.buildProject', () => cmdBuildProject()),
-        vscode.commands.registerCommand('lambdaflow.runProject',   () => cmdRunProject()),
+        vscode.commands.registerCommand('lambdaflow.runProject',   () => cmdRunProject(false)),
+        vscode.commands.registerCommand('lambdaflow.debugProject', () => cmdRunProject(true)),
         vscode.commands.registerCommand('lambdaflow.openConfig',   () => cmdOpenConfig())
     );
 }
@@ -54,9 +71,6 @@ async function cmdNewProject(): Promise<void> {
     });
     if (!appName) return;
 
-    const template = await pickLanguageTemplate();
-    if (!template) return;
-
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const defaultDir    = workspaceRoot
         ? path.join(workspaceRoot, 'Apps', appName)
@@ -69,15 +83,21 @@ async function cmdNewProject(): Promise<void> {
     });
     if (!targetDir) return;
 
+    const template = await pickLanguageTemplate();
+    if (!template) return;
+
+    const frontend = await pickFrontendTemplate();
+    if (!frontend) return;
+
     const cli      = cliProjectPath(frameworkPath);
     const terminal = vscode.window.createTerminal({ name: 'LambdaFlow' });
     terminal.show();
     terminal.sendText(
-        `dotnet run --project ${q(cli)} -- new ${q(appName)} ${q(targetDir)} --framework ${q(frameworkPath)} --language ${q(template.cliValue)} --self-contained`
+        `dotnet run --project ${q(cli)} -- new ${q(appName)} ${q(targetDir)} --framework ${q(frameworkPath)} --language ${q(template.cliValue)} --frontend ${q(frontend.cliValue)} --self-contained`
     );
 
     const action = await vscode.window.showInformationMessage(
-        `Creating "${appName}" (${template.label}) at ${targetDir}. Open when the terminal finishes.`,
+        `Creating "${appName}" (${template.label}, ${frontend.label}) at ${targetDir}. Open when the terminal finishes.`,
         'Open Folder'
     );
     if (action === 'Open Folder') {
@@ -108,7 +128,7 @@ async function cmdBuildProject(): Promise<void> {
     );
 }
 
-async function cmdRunProject(): Promise<void> {
+async function cmdRunProject(forceDebug: boolean): Promise<void> {
     const projectDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!projectDir) {
         vscode.window.showErrorMessage('LambdaFlow: No workspace folder is open.');
@@ -135,13 +155,14 @@ async function cmdRunProject(): Promise<void> {
     const exePath    = path.join(appDir, `${sanitized}.exe`);
 
     const cli       = cliProjectPath(frameworkPath);
+    const debugArg  = forceDebug ? ' --debug' : '';
     const buildTask = new vscode.Task(
         { type: 'shell', task: 'LambdaFlow: build' },
         vscode.workspace.workspaceFolders![0],
-        'LambdaFlow: build app',
+        forceDebug ? 'LambdaFlow: build debug app' : 'LambdaFlow: build app',
         'LambdaFlow',
         new vscode.ShellExecution(
-            `dotnet run --project "${cli}" -- build "${projectDir}" --framework "${frameworkPath}"`
+            `dotnet run --project "${cli}" -- build "${projectDir}" --framework "${frameworkPath}"${debugArg}`
         )
     );
 
@@ -168,7 +189,7 @@ async function cmdRunProject(): Promise<void> {
     }
 
     cp.spawn(exePath, [], { detached: true, stdio: 'ignore', cwd: appDir }).unref();
-    vscode.window.showInformationMessage(`LambdaFlow: ${appName} started.`);
+    vscode.window.showInformationMessage(`LambdaFlow: ${appName} started${forceDebug ? ' in debug mode' : ''}.`);
 }
 
 async function cmdOpenConfig(): Promise<void> {
@@ -260,6 +281,44 @@ async function pickLanguageTemplate(): Promise<LanguageTemplate | undefined> {
     });
 
     return selected?.template;
+}
+
+async function pickFrontendTemplate(): Promise<FrontendTemplate | undefined> {
+    const items: FrontendTemplatePickItem[] = FRONTEND_TEMPLATES.map(template => ({
+        label:    template.label,
+        detail:   template.detail,
+        template
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+        title:       'LambdaFlow â€” New Project',
+        placeHolder: 'Choose frontend type'
+    });
+
+    return selected?.template;
+}
+
+async function pickDebugMode(): Promise<boolean | undefined> {
+    const selected = await vscode.window.showQuickPick(
+        [
+            {
+                label: 'No',
+                description: 'Normal mode',
+                value: false
+            },
+            {
+                label: 'Yes',
+                description: 'Enable DevTools, console capture, and backend debug logs',
+                value: true
+            }
+        ],
+        {
+            title:       'LambdaFlow â€” New Project',
+            placeHolder: 'Enable debug mode during development?'
+        }
+    );
+
+    return selected?.value;
 }
 
 function sanitizeFileName(value: string): string {

@@ -135,7 +135,10 @@ public final class LambdaFlow {
             while ((line = transport.readLine()) != null) {
                 final String captured = line.trim();
                 if (captured.isEmpty()) continue;
-                POOL.submit(() -> processLine(captured));
+                if (transport.supportsConcurrentReadWrite())
+                    POOL.submit(() -> processLine(captured));
+                else
+                    processLine(captured);
             }
         } catch (IOException ex) {
             System.err.println("[LambdaFlow] read loop failed: " + ex);
@@ -243,6 +246,7 @@ public final class LambdaFlow {
         String readLine() throws IOException;
         void   writeLine(String line) throws IOException;
         void   close() throws IOException;
+        boolean supportsConcurrentReadWrite();
     }
 
     private static final class StdioTransport implements Transport {
@@ -256,6 +260,7 @@ public final class LambdaFlow {
             out.flush();
         }
         @Override public void close() {}
+        @Override public boolean supportsConcurrentReadWrite() { return true; }
     }
 
     private static final class PipeTransport implements Transport {
@@ -298,6 +303,11 @@ public final class LambdaFlow {
         @Override
         public void close() throws IOException {
             pipe.close();
+        }
+
+        @Override
+        public boolean supportsConcurrentReadWrite() {
+            return false;
         }
     }
 }
