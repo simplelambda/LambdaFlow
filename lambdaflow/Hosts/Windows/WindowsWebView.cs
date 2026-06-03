@@ -264,8 +264,9 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                             window.chrome.webview.postMessage(msg);
                         };
 
+                        window.__lambdaFlowInboundQueue = window.__lambdaFlowInboundQueue || [];
                         window.receive = function(msg) {
-                            console.warn('LambdaFlow: receive(msg) not implemented.');
+                            window.__lambdaFlowInboundQueue.push(msg);
                         };
                     ");
 

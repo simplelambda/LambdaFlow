@@ -246,7 +246,15 @@ LambdaFlow injects two low-level bridge functions into the browser context:
 - `send(string)`
 - `window.receive(string)`
 
-For day-to-day development, use the provided `lambdaflow.js` helper instead of writing raw JSON plumbing.
+Those functions are the raw bridge between WebView and host. Application code should use the provided `lambdaflow.js` SDK instead of writing JSON plumbing by hand. The SDK exposes the same concepts as the backend SDKs:
+
+- `LambdaFlow.send(kind, payload)` for fire-and-forget messages.
+- `LambdaFlow.request(kind, payload, timeoutOrOptions)` for request/response calls.
+- `LambdaFlow.receive(kind, handler)` / `LambdaFlow.on(kind, handler)` for backend-to-frontend events.
+- `LambdaFlow.handle(kind, handler)` for backend-to-frontend requests that expect a response.
+- `LambdaFlow.entity(...)`, `requestEntity(...)`, and `sendEntity(...)` for typed entity payloads.
+
+The runtime SDK stays as plain JavaScript so it works in HTML, React, Vite, or any other frontend. TypeScript projects can use the declarations in `lambdaflow/Sdk/JavaScript/lambdaflow.d.ts`; the optional `lambdaflowApi.ts` file is only a typed convenience wrapper around `window.LambdaFlow`, not a separate protocol.
 
 ```html
 <script src="lambdaflow.js"></script>

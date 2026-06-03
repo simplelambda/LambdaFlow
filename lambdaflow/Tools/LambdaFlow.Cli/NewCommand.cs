@@ -296,6 +296,7 @@ internal static class NewCommand
         var targetFrontendDir = Path.Combine(projectDir, "frontend");
 
         CopyTemplateDirectory(sourceFrontendDir, targetFrontendDir);
+        CopyJavaScriptSdk(frameworkRoot, Path.Combine(targetFrontendDir, "lambdaflow.js"));
     }
 
     private static void CreateGenericBackend(string projectDir) {
@@ -325,10 +326,6 @@ internal static class NewCommand
 
     private static void CreateReactFrontend(string projectDir, string frameworkRoot) {
         var frontendDir = Path.Combine(projectDir, "frontend");
-        var sdkSource   = Path.Combine(frameworkRoot, "lambdaflow", "Sdk", "JavaScript", "lambdaflow.js");
-
-        if (!File.Exists(sdkSource))
-            throw new FileNotFoundException($"JavaScript SDK source file not found at '{sdkSource}'.");
 
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "package.json"), """
         {
@@ -450,6 +447,18 @@ internal static class NewCommand
         """);
 
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "services", "lambdaflowApi.js"), """
+        function sdk() {
+          if (!window.LambdaFlow) {
+            throw new Error('LambdaFlow JavaScript SDK is not loaded. Load lambdaflow.js before the React entrypoint.');
+          }
+
+          if (typeof window.send !== 'function') {
+            throw new Error('window.send is not available. Run this app inside the LambdaFlow host.');
+          }
+
+          return window.LambdaFlow;
+        }
+
         export function getHostStatus() {
           if (!window.send) {
             return {
@@ -471,12 +480,83 @@ internal static class NewCommand
           };
         }
 
-        export async function pingBackend() {
-          if (!window.LambdaFlow)
-            throw new Error('LambdaFlow JavaScript SDK is not loaded.');
-
-          return window.LambdaFlow.request('backend.ping', null, 5000);
+        export function ensureLambdaFlow() {
+          return sdk();
         }
+
+        export function isLambdaFlowAvailable() {
+          return Boolean(window.LambdaFlow && typeof window.send === 'function');
+        }
+
+        export function configureLambdaFlow(options) {
+          return sdk().configure(options);
+        }
+
+        export function request(kind, payload = null, timeoutOrOptions = 30000) {
+          return sdk().request(kind, payload, timeoutOrOptions);
+        }
+
+        export function requestEntity(kind, type, data, timeoutOrOptions = 30000, version = 1) {
+          return sdk().requestEntity(kind, type, data, timeoutOrOptions, version);
+        }
+
+        export function send(kind, payload = null, options) {
+          sdk().send(kind, payload, options);
+        }
+
+        export function sendEntity(kind, type, data, version = 1, options) {
+          sdk().sendEntity(kind, type, data, version, options);
+        }
+
+        export function on(kind, handler, options) {
+          return sdk().on(kind, handler, options);
+        }
+
+        export function onAny(handler, options) {
+          return sdk().onAny(handler, options);
+        }
+
+        export function once(kind, handler, options) {
+          return sdk().once(kind, handler, options);
+        }
+
+        export function handle(kind, handler, options) {
+          return sdk().handle(kind, handler, options);
+        }
+
+        export function pendingCount() {
+          return sdk().pendingCount();
+        }
+
+        export function createEntity(type, data, version = 1) {
+          return sdk().entity(type, data, version);
+        }
+
+        export function unwrapEntity(payload) {
+          return sdk().unwrapEntity(payload);
+        }
+
+        export async function pingBackend() {
+          return request('backend.ping', null, 5000);
+        }
+
+        export const lf = {
+          ensureAvailable: ensureLambdaFlow,
+          isAvailable: isLambdaFlowAvailable,
+          configure: configureLambdaFlow,
+          request,
+          requestEntity,
+          send,
+          sendEntity,
+          emit: send,
+          on,
+          onAny,
+          once,
+          handle,
+          pendingCount,
+          entity: createEntity,
+          unwrapEntity
+        };
         """);
 
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "styles", "globals.css"), """
@@ -573,7 +653,9 @@ internal static class NewCommand
         """);
 
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "components", "common", ".gitkeep"), "");
-        FileSystemTools.WriteFile(Path.Combine(frontendDir, "public", "lambdaflow.js"), File.ReadAllText(sdkSource));
+        CopyJavaScriptSdk(frameworkRoot, Path.Combine(frontendDir, "public", "lambdaflow.js"));
+        CopyJavaScriptSdkTypes(frameworkRoot, Path.Combine(frontendDir, "src", "services", "lambdaflow.d.ts"));
+        CopyJavaScriptSdkApi(frameworkRoot, Path.Combine(frontendDir, "src", "services", "lambdaflowApi.ts"));
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "README.md"), """
         # React frontend
 
@@ -587,6 +669,10 @@ internal static class NewCommand
         `npm run build` automatically before packaging because `config.json`
         contains `build.preBuild` commands. The packaged app uses `frontend/dist`
         as its frontend folder.
+
+        `src/services/lambdaflowApi.js` is used by the JavaScript template.
+        `src/services/lambdaflowApi.ts` and `src/services/lambdaflow.d.ts`
+        are included for TypeScript projects.
         """);
     }
 
@@ -606,6 +692,29 @@ internal static class NewCommand
             Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
             File.Copy(src, dst, overwrite: true);
         }
+    }
+
+    private static void CopyJavaScriptSdk(string frameworkRoot, string targetPath) {
+        var sdkSource = Path.Combine(frameworkRoot, "lambdaflow", "Sdk", "JavaScript", "lambdaflow.js");
+
+        if (!File.Exists(sdkSource))
+            throw new FileNotFoundException($"JavaScript SDK source file not found at '{sdkSource}'.");
+
+        FileSystemTools.WriteFile(targetPath, File.ReadAllText(sdkSource));
+    }
+
+    private static void CopyJavaScriptSdkTypes(string frameworkRoot, string targetPath) {
+        var sdkTypesSource = Path.Combine(frameworkRoot, "lambdaflow", "Sdk", "JavaScript", "lambdaflow.d.ts");
+
+        if (File.Exists(sdkTypesSource))
+            FileSystemTools.WriteFile(targetPath, File.ReadAllText(sdkTypesSource));
+    }
+
+    private static void CopyJavaScriptSdkApi(string frameworkRoot, string targetPath) {
+        var sdkApiSource = Path.Combine(frameworkRoot, "lambdaflow", "Sdk", "JavaScript", "lambdaflowApi.ts");
+
+        if (File.Exists(sdkApiSource))
+            FileSystemTools.WriteFile(targetPath, File.ReadAllText(sdkApiSource));
     }
 
     private static bool IsBuildArtifactDirectory(string part) {

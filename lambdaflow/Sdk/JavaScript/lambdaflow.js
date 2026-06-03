@@ -22,9 +22,10 @@
 (function (global) {
     'use strict';
 
-    var SDK_VERSION = '0.2.0';
+    var SDK_VERSION = '0.3.0';
     var DEFAULT_TIMEOUT_MS = 30000;
     var DEFAULT_REQUEST_RESULT_KIND_SUFFIX = '.result';
+    var INBOUND_QUEUE_NAME = '__lambdaFlowInboundQueue';
 
     var eventHandlers = new Map();   // kind -> Set<entry>
     var requestHandlers = new Map(); // kind -> handler
@@ -61,6 +62,15 @@
     function logError() {
         if (config.logger && typeof config.logger.error === 'function') {
             config.logger.error.apply(config.logger, arguments);
+        }
+    }
+
+    function assertHostAvailable() {
+        if (typeof global.send !== 'function') {
+            throw new LambdaFlowError(
+                'window.send is not available. This code must run inside a LambdaFlow host, or you must provide a mock transport.',
+                'HOST_SEND_UNAVAILABLE'
+            );
         }
     }
 
@@ -194,12 +204,7 @@
     }
 
     function rawSendEnvelope(envelope) {
-        if (typeof global.send !== 'function') {
-            throw new LambdaFlowError(
-                'window.send is not available. This code must run inside a LambdaFlow host, or you must provide a mock transport.',
-                'HOST_SEND_UNAVAILABLE'
-            );
-        }
+        assertHostAvailable();
 
         if (!validateEnvelope(envelope)) {
             throw new LambdaFlowError('Invalid LambdaFlow envelope.', 'INVALID_ENVELOPE', envelope);
@@ -359,6 +364,18 @@
         dispatchEvent(envelope);
     }
 
+    function drainQueuedInboundMessages() {
+        var queue = global[INBOUND_QUEUE_NAME];
+
+        if (!Array.isArray(queue)) {
+            return;
+        }
+
+        while (queue.length > 0) {
+            receiveRawMessage(queue.shift());
+        }
+    }
+
     function addEventHandler(kind, handler, options) {
         assertKind(kind);
 
@@ -442,10 +459,35 @@
             return typeof global.send === 'function';
         },
 
+        isAvailable: function () {
+            return this.isHostAvailable();
+        },
+
+        ensureHostAvailable: function () {
+            assertHostAvailable();
+            return this;
+        },
+
+        ensureAvailable: function () {
+            return this.ensureHostAvailable();
+        },
+
         /**
          * Low-level parser entrypoint used by the host through window.receive(raw).
          */
         _receiveRaw: receiveRawMessage,
+
+        /**
+         * Public raw receive entrypoint for tests and custom host adapters.
+         */
+        receiveRaw: receiveRawMessage,
+
+        /**
+         * Send a full envelope. Prefer send/request/handle for application code.
+         */
+        sendEnvelope: function (envelope) {
+            return rawSendEnvelope(envelope);
+        },
 
         /**
          * Register one or more listeners for an inbound event.
@@ -453,6 +495,10 @@
          */
         on: function (kind, handler, options) {
             return addEventHandler(kind, handler, options);
+        },
+
+        onAny: function (handler, options) {
+            return addEventHandler('*', handler, options);
         },
 
         /**
@@ -776,6 +822,12 @@
 
     global.receive = receiveRawMessage;
     global.LambdaFlow = LambdaFlow;
+
+    if (typeof global.setTimeout === 'function') {
+        global.setTimeout(drainQueuedInboundMessages, 0);
+    } else {
+        drainQueuedInboundMessages();
+    }
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = LambdaFlow;
