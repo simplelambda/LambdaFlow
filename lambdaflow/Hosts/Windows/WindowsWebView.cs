@@ -4,6 +4,7 @@ using System.Text;
 using System.Drawing;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -26,8 +27,10 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             private WebView2? _view;
             private Form?     _host;
             private ZipArchive? _pak;
+            private readonly ConcurrentQueue<string> _pendingFrontendMessages = new();
 
             private bool _initialized;
+            private bool _frontendReady;
 
         #endregion
 
@@ -98,8 +101,10 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             }
 
             public void SendMessageToFrontend(string message) {
-                if (_view?.CoreWebView2 is null)
+                if (_view?.CoreWebView2 is null || !_frontendReady) {
+                    _pendingFrontendMessages.Enqueue(message);
                     return;
+                }
 
                 if (_host is not null && !_host.IsDisposed && _host.InvokeRequired) {
                     _host.BeginInvoke(new Action(() => SendMessageToFrontend(message)));
@@ -258,6 +263,11 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                     _view.CoreWebView2.OpenDevToolsWindow();
             }
 
+            private void FlushPendingFrontendMessages() {
+                while (_pendingFrontendMessages.TryDequeue(out var message))
+                    SendMessageToFrontend(message);
+            }
+
             private async Task BindFrontendMethods() {
                 await _view!.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
                         window.send = function(msg) {
@@ -268,6 +278,10 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                         window.receive = function(msg) {
                             window.__lambdaFlowInboundQueue.push(msg);
                         };
+
+                        window.chrome.webview.postMessage(JSON.stringify({
+                            kind: '__lambdaflow_ready'
+                        }));
                     ");
 
                 if (Config.Debug.Enabled && Config.Debug.CaptureFrontendConsole) {
@@ -332,8 +346,14 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                     using var document = JsonDocument.Parse(message);
                     var root = document.RootElement;
 
-                    if (!root.TryGetProperty("kind", out var kind)
-                        || kind.GetString() != "__console")
+                    if (!root.TryGetProperty("kind", out var kind))
+                        return false;
+                    if (kind.GetString() == "__lambdaflow_ready") {
+                        _frontendReady = true;
+                        FlushPendingFrontendMessages();
+                        return true;
+                    }
+                    if (kind.GetString() != "__console")
                         return false;
 
                     if (!Config.Debug.Enabled || !Config.Debug.CaptureFrontendConsole)

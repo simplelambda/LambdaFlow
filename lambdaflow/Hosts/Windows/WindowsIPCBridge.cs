@@ -14,7 +14,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
     internal class WindowsIPCBridge : IIPCBridge{
         #region Variables
 
-            #pragma warning disable CS8618 
+            #pragma warning disable CS8618
                 private BackendProcess _backend;
             #pragma warning restore CS8618
 

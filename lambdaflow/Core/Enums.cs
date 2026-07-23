@@ -1,4 +1,5 @@
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("lambdaflow.windows")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("lambdaflow.linux")]
 
 namespace lambdaflow.lambdaflow.Core
 {
@@ -21,6 +22,7 @@ namespace lambdaflow.lambdaflow.Core
 
     internal enum IPCTransport
     {
+        Auto,
         StdIO,
         NamedPipe
     }

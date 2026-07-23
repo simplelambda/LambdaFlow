@@ -22,7 +22,7 @@
 (function (global) {
     'use strict';
 
-    var SDK_VERSION = '0.3.0';
+    var SDK_VERSION = '1.3.0';
     var DEFAULT_TIMEOUT_MS = 30000;
     var DEFAULT_REQUEST_RESULT_KIND_SUFFIX = '.result';
     var INBOUND_QUEUE_NAME = '__lambdaFlowInboundQueue';
@@ -82,6 +82,12 @@
         if (typeof kind !== 'string' || kind.trim() === '') {
             throw new Error('LambdaFlow requires a non-empty string kind.');
         }
+    }
+
+    function resultKind(kind) {
+        return kind.endsWith(DEFAULT_REQUEST_RESULT_KIND_SUFFIX)
+            ? kind
+            : kind + DEFAULT_REQUEST_RESULT_KIND_SUFFIX;
     }
 
     function normalizeRequestOptions(timeoutOrOptions) {
@@ -315,7 +321,7 @@
                 return handler.fn(payload, meta);
             })
             .then(function (result) {
-                var responseKind = envelope.kind + DEFAULT_REQUEST_RESULT_KIND_SUFFIX;
+                var responseKind = resultKind(envelope.kind);
 
                 rawSendEnvelope({
                     kind: responseKind,
@@ -325,7 +331,7 @@
                 });
             })
             .catch(function (error) {
-                var responseKind = envelope.kind + DEFAULT_REQUEST_RESULT_KIND_SUFFIX;
+                var responseKind = resultKind(envelope.kind);
 
                 rawSendEnvelope({
                     kind: responseKind,
@@ -613,7 +619,7 @@
             }
 
             return rawSendEnvelope({
-                kind: kind,
+                kind: resultKind(kind),
                 id: id,
                 ok: true,
                 payload: payload === undefined ? null : payload
@@ -631,7 +637,7 @@
             }
 
             return rawSendEnvelope({
-                kind: kind,
+                kind: resultKind(kind),
                 id: id,
                 ok: false,
                 error: toErrorObject(error)

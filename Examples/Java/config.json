@@ -5,7 +5,7 @@
   "appIcon": "app.ico",
 
   "securityMode": "Hardened",
-  "ipcTransport": "NamedPipe",
+  "ipcTransport": "Auto",
 
   "developmentBackendFolder": "backend",
   "developmentFrontendFolder": "frontend",
@@ -17,6 +17,28 @@
     "windows": {
       "archs": {
         "x64": {
+          "compileCommand": "mvn -q -DskipTests package",
+          "compileDirectory": "target",
+          "runCommand": "java",
+          "runArgs": ["-jar", "Backend.jar"]
+        },
+        "arm64": {
+          "compileCommand": "mvn -q -DskipTests package",
+          "compileDirectory": "target",
+          "runCommand": "java",
+          "runArgs": ["-jar", "Backend.jar"]
+        }
+      }
+    },
+    "linux": {
+      "archs": {
+        "x64": {
+          "compileCommand": "mvn -q -DskipTests package",
+          "compileDirectory": "target",
+          "runCommand": "java",
+          "runArgs": ["-jar", "Backend.jar"]
+        },
+        "arm64": {
           "compileCommand": "mvn -q -DskipTests package",
           "compileDirectory": "target",
           "runCommand": "java",

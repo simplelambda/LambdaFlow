@@ -73,12 +73,28 @@ export function sendEntity(
     sdk().sendEntity(kind, type, data, version, options);
 }
 
+export function emit(
+    kind: string,
+    payload: unknown = null,
+    options?: { id?: string; ok?: boolean }
+): void {
+    sdk().emit(kind, payload, options);
+}
+
 export function on<TPayload = unknown>(
     kind: string,
     handler: LambdaFlowEventHandler<TPayload>,
     options?: { once?: boolean; unwrap?: boolean }
 ): () => void {
     return sdk().on(kind, handler, options);
+}
+
+export function receive<TPayload = unknown>(
+    kind: string,
+    handler: LambdaFlowEventHandler<TPayload>,
+    options?: { once?: boolean; unwrap?: boolean }
+): () => void {
+    return sdk().receive(kind, handler, options);
 }
 
 export function onAny(
@@ -104,6 +120,25 @@ export function handle<TPayload = unknown, TResult = unknown>(
     return sdk().handle(kind, handler, options);
 }
 
+export function off(
+    kind: string,
+    handler?: LambdaFlowEventHandler
+): LambdaFlowGlobal {
+    return sdk().off(kind, handler);
+}
+
+export function unhandle(kind: string): LambdaFlowGlobal {
+    return sdk().unhandle(kind);
+}
+
+export function respond(kind: string, id: string, payload: unknown = null): void {
+    sdk().respond(kind, id, payload);
+}
+
+export function reject(kind: string, id: string, error: unknown): void {
+    sdk().reject(kind, id, error);
+}
+
 export function pendingCount(): number {
     return sdk().pendingCount();
 }
@@ -120,6 +155,26 @@ export function unwrapEntity<T = unknown>(payload: unknown): T {
     return sdk().unwrapEntity<T>(payload);
 }
 
+export function isEntity(payload: unknown): payload is LambdaFlowEntity {
+    return sdk().isEntity(payload);
+}
+
+export function entityType(payload: unknown): string | undefined {
+    return sdk().entityType(payload);
+}
+
+export function entityVersion(payload: unknown): number | undefined {
+    return sdk().entityVersion(payload);
+}
+
+export function clearHandlers(): LambdaFlowGlobal {
+    return sdk().clearHandlers();
+}
+
+export function destroy(): void {
+    sdk().destroy();
+}
+
 export const lf = {
     ensureAvailable: ensureLambdaFlow,
     isAvailable: isLambdaFlowAvailable,
@@ -128,14 +183,24 @@ export const lf = {
     requestEntity,
     send,
     sendEntity,
-    emit: send,
+    emit,
     on,
+    receive,
     onAny,
     once,
     handle,
+    off,
+    unhandle,
+    respond,
+    reject,
     pendingCount,
     entity,
-    unwrapEntity
+    isEntity,
+    unwrapEntity,
+    entityType,
+    entityVersion,
+    clearHandlers,
+    destroy
 };
 
 export type {

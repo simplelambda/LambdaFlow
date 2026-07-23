@@ -52,7 +52,7 @@ namespace lambdaflow.lambdaflow.Core{
                 try {
                     if (!_process.HasExited) {
                         try { _process.StandardInput.Close(); } catch { }
-                        if (!_process.WaitForExit(2000)) _process.Kill();
+                        if (!_process.WaitForExit(2000)) _process.Kill(entireProcessTree: true);
                     }
                 }
                 catch { }
@@ -76,7 +76,9 @@ namespace lambdaflow.lambdaflow.Core{
             internal static ProcessStartInfo CreateDefaultStartInfo() {
                 var backendDir = Path.Combine(AppContext.BaseDirectory, "backend");
                 var arch       = Config.CurrentArch;
-                var command    = string.IsNullOrWhiteSpace(arch.RunCommand) ? "Backend.exe" : arch.RunCommand;
+                var command    = string.IsNullOrWhiteSpace(arch.RunCommand)
+                    ? (OperatingSystem.IsWindows() ? "Backend.exe" : "Backend")
+                    : arch.RunCommand;
                 var visibleBackendConsole =
                     Config.Debug.Enabled
                     && Config.Debug.ShowBackendConsole

@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# Binary assets and release artifacts
+*.png binary
+*.ico binary
+*.pak binary
+*.vsix binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.jar binary
+*.so binary
+*.dylib binary

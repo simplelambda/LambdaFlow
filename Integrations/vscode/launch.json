@@ -6,11 +6,15 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "LambdaFlow: build example app",
-      "program": "${workspaceFolder}/Results/CSharpTest-1.0.0/windows-x64/lambdaflow.windows.exe",
+      "program": "${workspaceFolder}/Examples/CSharp/Results/LambdaFlowCSharp-1.0.0/linux-x64/LambdaFlowCSharp",
       "args": [],
-      "cwd": "${workspaceFolder}/Results/CSharpTest-1.0.0/windows-x64",
+      "cwd": "${workspaceFolder}/Examples/CSharp/Results/LambdaFlowCSharp-1.0.0/linux-x64",
       "console": "internalConsole",
-      "stopAtEntry": false
+      "stopAtEntry": false,
+      "windows": {
+        "program": "${workspaceFolder}/Examples/CSharp/Results/LambdaFlowCSharp-1.0.0/windows-x64/LambdaFlowCSharp.exe",
+        "cwd": "${workspaceFolder}/Examples/CSharp/Results/LambdaFlowCSharp-1.0.0/windows-x64"
+      }
     }
   ]
 }

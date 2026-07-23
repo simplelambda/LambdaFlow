@@ -1,39 +1,44 @@
-"""Build step: copies the entire backend tree (including nodes/, models/, training/)
-into bin/ so the LambdaFlow CLI can package it via compileDirectory: bin."""
+"""Build the Python backend directory consumed by the LambdaFlow CLI."""
 
 import os
 import shutil
-import glob
+from pathlib import Path
 
-BIN = "bin"
-SDK_SOURCE = os.path.normpath(os.path.join("..", "lambdaflow", "Sdk", "Python", "lambdaflow.py"))
+BACKEND_DIR = Path(__file__).resolve().parent
+BIN = BACKEND_DIR / "bin"
+SDK_CANDIDATES = (
+    BACKEND_DIR.parent / "lambdaflow" / "Sdk" / "Python" / "lambdaflow.py",
+    BACKEND_DIR.parents[2] / "lambdaflow" / "Sdk" / "Python" / "lambdaflow.py",
+)
+SDK_SOURCE = next((path for path in SDK_CANDIDATES if path.is_file()), None)
 
-os.makedirs(BIN, exist_ok=True)
+BIN.mkdir(exist_ok=True)
 
 
 _SKIP_DIRS = {"bin", "__pycache__", ".git", "node_modules"}
 
 
-def copy_tree(src_dir: str, dst_dir: str):
-    os.makedirs(dst_dir, exist_ok=True)
+def copy_tree(src_dir: Path, dst_dir: Path) -> None:
+    dst_dir.mkdir(exist_ok=True)
     for item in os.listdir(src_dir):
         if item in _SKIP_DIRS:
             continue
-        src = os.path.join(src_dir, item)
-        dst = os.path.join(dst_dir, item)
-        if os.path.isdir(src):
+        src = src_dir / item
+        dst = dst_dir / item
+        if src.is_dir():
             copy_tree(src, dst)
         elif item.endswith(".py") and item != "build.py":
             shutil.copy2(src, dst)
 
 
 # Copy all Python sources preserving directory structure
-copy_tree(".", BIN)
+copy_tree(BACKEND_DIR, BIN)
 
 # Copy the LambdaFlow SDK
-if not os.path.isfile(SDK_SOURCE):
-    raise FileNotFoundError(f"LambdaFlow Python SDK not found at {SDK_SOURCE}")
-shutil.copy(SDK_SOURCE, os.path.join(BIN, "lambdaflow.py"))
+if SDK_SOURCE is None:
+    searched = ", ".join(str(path) for path in SDK_CANDIDATES)
+    raise FileNotFoundError(f"LambdaFlow Python SDK not found. Searched: {searched}")
+shutil.copy2(SDK_SOURCE, BIN / "lambdaflow.py")
 
-count = sum(len(files) for _, _, files in os.walk(BIN) if files)
+count = sum(len(files) for _, _, files in os.walk(BIN))
 print(f"Backend built — {count} files in {BIN}/")

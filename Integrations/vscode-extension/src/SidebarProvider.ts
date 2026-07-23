@@ -61,7 +61,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             return {
                 appName:      String(cfg.appName      ?? 'Unknown'),
                 appVersion:   String(cfg.appVersion   ?? '?'),
-                ipcTransport: String(cfg.ipcTransport ?? 'NamedPipe')
+                ipcTransport: String(cfg.ipcTransport ?? 'Auto')
             };
         } catch {
             return null;

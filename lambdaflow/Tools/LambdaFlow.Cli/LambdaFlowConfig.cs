@@ -14,6 +14,9 @@ internal sealed class LambdaFlowConfig
     [JsonPropertyName("organizationName")]
     public string OrganizationName { get; set; } = "LambdaFlow";
 
+    [JsonPropertyName("appIcon")]
+    public string AppIcon { get; set; } = "app.ico";
+
     [JsonPropertyName("developmentBackendFolder")]
     public string DevelopmentBackendFolder { get; set; } = "backend";
 
@@ -35,14 +38,15 @@ internal sealed class LambdaFlowConfig
     [JsonPropertyName("platforms")]
     public Dictionary<string, PlatformConfig> Platforms { get; set; } = new Dictionary<string, PlatformConfig>();
 
-    internal ArchConfig GetWindowsX64() {
-        if (!Platforms.TryGetValue("windows", out var windows))
-            throw new InvalidOperationException("config.json must define platforms.windows.");
+    internal ArchConfig GetArch(BuildTarget target) {
+        if (!Platforms.TryGetValue(target.PlatformKey, out var platform))
+            throw new InvalidOperationException($"config.json must define platforms.{target.PlatformKey}.");
 
-        if (!windows.Archs.TryGetValue("x64", out var x64))
-            throw new InvalidOperationException("config.json must define platforms.windows.archs.x64.");
+        if (!platform.Archs.TryGetValue(target.ArchKey, out var arch))
+            throw new InvalidOperationException(
+                $"config.json must define platforms.{target.PlatformKey}.archs.{target.ArchKey}.");
 
-        return x64;
+        return arch;
     }
 }
 
@@ -103,13 +107,13 @@ internal sealed class PlatformConfig
 internal sealed class ArchConfig
 {
     [JsonPropertyName("compileCommand")]
-    public string CompileCommand { get; set; } = "dotnet publish -c Release -r win-x64 --self-contained false -o bin";
+    public string CompileCommand { get; set; } = "";
 
     [JsonPropertyName("compileDirectory")]
     public string CompileDirectory { get; set; } = "bin";
 
     [JsonPropertyName("runCommand")]
-    public string RunCommand { get; set; } = "Backend.exe";
+    public string RunCommand { get; set; } = "";
 
     [JsonPropertyName("runArgs")]
     public List<string> RunArgs { get; set; } = new List<string>();

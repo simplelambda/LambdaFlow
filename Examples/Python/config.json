@@ -5,7 +5,7 @@
   "appIcon": "app.ico",
 
   "securityMode": "Hardened",
-  "ipcTransport": "NamedPipe",
+  "ipcTransport": "Auto",
 
   "developmentBackendFolder": "backend",
   "developmentFrontendFolder": "frontend",
@@ -20,6 +20,28 @@
           "compileCommand": "python build.py",
           "compileDirectory": "bin",
           "runCommand": "python",
+          "runArgs": ["backend.py"]
+        },
+        "arm64": {
+          "compileCommand": "python build.py",
+          "compileDirectory": "bin",
+          "runCommand": "python",
+          "runArgs": ["backend.py"]
+        }
+      }
+    },
+    "linux": {
+      "archs": {
+        "x64": {
+          "compileCommand": "python3 build.py",
+          "compileDirectory": "bin",
+          "runCommand": "python3",
+          "runArgs": ["backend.py"]
+        },
+        "arm64": {
+          "compileCommand": "python3 build.py",
+          "compileDirectory": "bin",
+          "runCommand": "python3",
           "runArgs": ["backend.py"]
         }
       }

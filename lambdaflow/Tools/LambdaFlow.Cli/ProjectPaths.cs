@@ -13,7 +13,7 @@ internal static class ProjectPaths
 
         var current = new DirectoryInfo(startDirectory);
         while (current is not null) {
-            var candidate = Path.Combine(current.FullName, "lambdaflow", "Hosts", "Windows", "lambdaflow.windows.csproj");
+            var candidate = Path.Combine(current.FullName, "lambdaflow", "Tools", "LambdaFlow.Cli", "LambdaFlow.Cli.csproj");
             if (File.Exists(candidate))
                 return current.FullName;
 
@@ -23,8 +23,9 @@ internal static class ProjectPaths
         throw new InvalidOperationException("LambdaFlow framework root could not be found. Pass --framework or set LAMBDAFLOW_HOME.");
     }
 
-    internal static string HostProject(string frameworkRoot) {
-        return Path.Combine(frameworkRoot, "lambdaflow", "Hosts", "Windows", "lambdaflow.windows.csproj");
+    internal static string HostProject(string frameworkRoot, BuildTarget target) {
+        var hostFolder = target.PlatformKey == "windows" ? "Windows" : "Linux";
+        return Path.Combine(frameworkRoot, "lambdaflow", "Hosts", hostFolder, target.HostProjectFile);
     }
 
     internal static string CliProject(string frameworkRoot) {
@@ -32,9 +33,9 @@ internal static class ProjectPaths
     }
 
     private static string ValidateFrameworkRoot(string root) {
-        var hostProject = HostProject(root);
-        if (!File.Exists(hostProject))
-            throw new FileNotFoundException($"LambdaFlow Windows host project not found at '{hostProject}'.");
+        var cliProject = CliProject(root);
+        if (!File.Exists(cliProject))
+            throw new FileNotFoundException($"LambdaFlow CLI project not found at '{cliProject}'.");
 
         return root;
     }

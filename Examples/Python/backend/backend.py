@@ -4,6 +4,20 @@ Mirrors the C# example: same set of tools, same wire-level kinds, plus a
 typed-object (Dog) demo.
 """
 
+import pathlib
+import sys
+
+_HERE = pathlib.Path(__file__).resolve()
+_SDK_CANDIDATES = (
+    _HERE.parent,
+    _HERE.parents[1] / "lambdaflow" / "Sdk" / "Python",
+    _HERE.parents[3] / "lambdaflow" / "Sdk" / "Python",
+)
+_SDK_DIR = next((path for path in _SDK_CANDIDATES if (path / "lambdaflow.py").is_file()), None)
+if _SDK_DIR is None:
+    raise FileNotFoundError("LambdaFlow Python SDK not found.")
+sys.path.insert(0, str(_SDK_DIR))
+
 import lambdaflow as lf
 
 

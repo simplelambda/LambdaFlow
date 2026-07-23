@@ -31,9 +31,9 @@ namespace lambdaflow.lambdaflow.Hosts.Windows
             var services = CreateServices();
 
             services.IPCBridge.Initialize();
-            services.IPCBridge.OnProcessStdOut += async message =>
-            {
+            services.IPCBridge.OnProcessStdOut += message => {
                 services.WebView.SendMessageToFrontend(message);
+                return Task.CompletedTask;
             };
 
             services.WebView.Initialize(services.IPCBridge);

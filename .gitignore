@@ -1,112 +1,123 @@
-# =========================
-# AI / agent local files
-# =========================
-AGENTS.md
+# Local agent configuration
 CLAUDE.md
-
 .claude/
 .agent/
 .codex/
 
-# =========================
-# Build outputs
-# =========================
+# Build and package outputs
 bin/
 obj/
-dist/
-build/
 out/
 target/
+Results/
+artifacts/
+dist/
+build/
+*.pak
+*.vsix
+*.nupkg
+*.snupkg
+*.msi
+*.msix
+*.AppImage
+*.deb
+*.rpm
+*.dmg
 
-# =========================
-# Dependencies
-# =========================
+# Dependencies and virtual environments
 node_modules/
+.npm/
+.pnpm-store/
+.yarn/cache/
 .venv/
 venv/
 env/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+.gradle/
+.nuget/
+packages/
 
-# =========================
-# IDE / editor
-# =========================
+# Python bytecode and tool state
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# IDE and editor state
 .vscode/
 .idea/
+.vs/
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
+*.code-workspace
+*~
+*.swp
+*.tmp
+*.bak
 
-# =========================
-# OS files
-# =========================
+# Operating-system files
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# =========================
-# Logs
-# =========================
+# Logs, diagnostics, tests, and coverage
 *.log
 logs/
+*.dmp
+/core
+/core.*
+TestResults/
+coverage/
+.coverage
+coverage.*
+.cache/
 
-# =========================
-# Environment / secrets
-# =========================
+# Environment files and private signing material
 .env
 .env.*
 !.env.example
+secrets.json
+appsettings.*.local.json
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.snk
 
-# =========================
-# Packages / archives
-# =========================
+# Archives
 *.zip
 *.tar
 *.tar.gz
+*.tgz
 *.rar
+*.7z
 
-# =========================
-# Test / cache
-# =========================
-.coverage
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.cache/
-
-# =========================
-# TypeScript / JavaScript
-# =========================
+# JavaScript/TypeScript tool state
 *.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# =========================
-# C# / .NET
-# =========================
+# Compiled .NET, Java, and native binaries
 *.dll
 *.exe
 *.pdb
 *.cache
-TestResults/
-packages/
-
-# =========================
-# Java
-# =========================
 *.class
 *.jar
 *.war
 *.ear
+*.so
+*.dylib
 
-# =========================
-# Python ML artifacts
-# =========================
+# Machine-learning artifacts
 checkpoints/
 runs/
 wandb/

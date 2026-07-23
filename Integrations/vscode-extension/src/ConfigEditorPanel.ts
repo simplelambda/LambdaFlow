@@ -17,6 +17,8 @@ interface WindowConfig {
 interface ArchConfig {
     compileCommand:   string;
     compileDirectory: string;
+    runCommand?:       string;
+    runArgs?:          string[];
 }
 
 interface DebugConfig {
@@ -57,6 +59,7 @@ interface LambdaFlowConfig {
     debug?:                    DebugConfig;
     platforms: {
         windows?: { archs: { x64?: ArchConfig } };
+        linux?: { archs: { x64?: ArchConfig } };
         [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -134,7 +137,12 @@ export class LambdaFlowConfigEditorProvider implements vscode.CustomTextEditorPr
 function buildHtml(config: LambdaFlowConfig): string {
     const nonce = crypto.randomBytes(16).toString('hex');
     const csp   = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
-    const x64   = config.platforms?.windows?.archs?.x64 ?? { compileCommand: '', compileDirectory: 'bin' };
+    const winX64 = config.platforms?.windows?.archs?.x64 ?? {
+        compileCommand: '', compileDirectory: 'bin', runCommand: 'Backend.exe', runArgs: []
+    };
+    const linuxX64 = config.platforms?.linux?.archs?.x64 ?? {
+        compileCommand: '', compileDirectory: 'bin', runCommand: 'Backend', runArgs: []
+    };
     const debug = normalizeDebug(config.debug);
     const preBuild = normalizePreBuild(config.build);
 
@@ -414,7 +422,7 @@ function buildHtml(config: LambdaFlowConfig): string {
 
   <div class="field">
     <label>Windows x64 — Compile Command</label>
-    <input type="text" name="winX64CompileCommand" value="${e(x64.compileCommand)}">
+    <input type="text" name="winX64CompileCommand" value="${e(winX64.compileCommand)}">
     <p class="hint">
       Runs inside the backend source folder. Output must land in the compile directory.<br>
       Examples: <code>dotnet publish Backend.csproj -c Release -r win-x64 -o bin</code>
@@ -424,15 +432,49 @@ function buildHtml(config: LambdaFlowConfig): string {
 
   <div class="field">
     <label>Windows x64 — Compile Directory</label>
-    <input type="text" name="winX64CompileDirectory" value="${e(x64.compileDirectory)}">
+    <input type="text" name="winX64CompileDirectory" value="${e(winX64.compileDirectory)}">
     <p class="hint">Relative to backend source folder. Copied to <code>backend/</code> in the result.</p>
   </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label>Windows x64 — Run Command</label>
+      <input type="text" name="winX64RunCommand" value="${e(winX64.runCommand ?? 'Backend.exe')}">
+    </div>
+    <div class="field">
+      <label>Windows x64 — Run Args</label>
+      <input type="text" name="winX64RunArgs" value="${e((winX64.runArgs ?? []).join(' '))}">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Linux x64 — Compile Command</label>
+    <input type="text" name="linuxX64CompileCommand" value="${e(linuxX64.compileCommand)}">
+  </div>
+
+  <div class="field">
+    <label>Linux x64 — Compile Directory</label>
+    <input type="text" name="linuxX64CompileDirectory" value="${e(linuxX64.compileDirectory)}">
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label>Linux x64 — Run Command</label>
+      <input type="text" name="linuxX64RunCommand" value="${e(linuxX64.runCommand ?? 'Backend')}">
+    </div>
+    <div class="field">
+      <label>Linux x64 — Run Args</label>
+      <input type="text" name="linuxX64RunArgs" value="${e((linuxX64.runArgs ?? []).join(' '))}">
+    </div>
+  </div>
+  <p class="hint">Run arguments are space-separated; wrap an argument containing spaces in double quotes.</p>
 
   <h2>Security &amp; IPC</h2>
 
   <div class="field">
     <label>IPC Transport</label>
     <select name="ipcTransport">
+      <option value="Auto"      ${config.ipcTransport === 'Auto'      ? 'selected' : ''}>Auto — Named Pipe on Windows, StdIO on Linux</option>
       <option value="NamedPipe" ${config.ipcTransport === 'NamedPipe' ? 'selected' : ''}>Named Pipe — recommended on Windows</option>
       <option value="StdIO"     ${config.ipcTransport === 'StdIO'     ? 'selected' : ''}>StdIO — universal fallback</option>
     </select>
@@ -561,6 +603,20 @@ function buildHtml(config: LambdaFlowConfig): string {
               ...(original.platforms?.windows?.archs?.x64 ?? {}),
               compileCommand:   get('winX64CompileCommand'),
               compileDirectory: get('winX64CompileDirectory'),
+              runCommand:       get('winX64RunCommand'),
+              runArgs:          parseArgs(get('winX64RunArgs')),
+            }
+          }
+        },
+        linux: {
+          archs: {
+            ...(original.platforms?.linux?.archs ?? {}),
+            x64: {
+              ...(original.platforms?.linux?.archs?.x64 ?? {}),
+              compileCommand:   get('linuxX64CompileCommand'),
+              compileDirectory: get('linuxX64CompileDirectory'),
+              runCommand:       get('linuxX64RunCommand'),
+              runArgs:          parseArgs(get('linuxX64RunArgs')),
             }
           }
         }
@@ -602,7 +658,23 @@ function buildHtml(config: LambdaFlowConfig): string {
     if (x64) {
       set('winX64CompileCommand',   x64.compileCommand);
       set('winX64CompileDirectory', x64.compileDirectory);
+      set('winX64RunCommand',       x64.runCommand ?? 'Backend.exe');
+      set('winX64RunArgs',          (x64.runArgs ?? []).join(' '));
     }
+    const linuxX64 = cfg.platforms?.linux?.archs?.x64;
+    if (linuxX64) {
+      set('linuxX64CompileCommand',   linuxX64.compileCommand);
+      set('linuxX64CompileDirectory', linuxX64.compileDirectory);
+      set('linuxX64RunCommand',       linuxX64.runCommand ?? 'Backend');
+      set('linuxX64RunArgs',          (linuxX64.runArgs ?? []).join(' '));
+    }
+  }
+
+  function parseArgs(value) {
+    const matches = value.match(/(?:[^\\s"]+|"[^"]*")+/g) ?? [];
+    return matches.map(item => item.startsWith('"') && item.endsWith('"')
+      ? item.slice(1, -1)
+      : item);
   }
 
   function renderPreBuildList(items) {

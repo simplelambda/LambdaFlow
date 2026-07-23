@@ -9,7 +9,7 @@ export function resolveFrameworkPath(): string | null {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) return null;
 
-    const indicator = path.join(root, 'lambdaflow', 'Hosts', 'Windows', 'lambdaflow.windows.csproj');
+    const indicator = cliProjectPath(root);
     return fs.existsSync(indicator) ? root : null;
 }
 

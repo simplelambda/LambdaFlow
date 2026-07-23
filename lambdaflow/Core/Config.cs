@@ -22,7 +22,7 @@ namespace lambdaflow.lambdaflow.Core
     internal sealed class ArchConfig
     {
         [JsonPropertyName("runCommand")]
-        public string RunCommand { get; set; } = "Backend.exe";
+        public string RunCommand { get; set; } = "";
 
         [JsonPropertyName("runArgs")]
         public List<string> RunArgs { get; set; } = new List<string>();
@@ -76,7 +76,7 @@ namespace lambdaflow.lambdaflow.Core
         public string SecurityMode { get; set; } = "Hardened";
 
         [JsonPropertyName("ipcTransport")]
-        public string IpcTransport { get; set; } = "NamedPipe";
+        public string IpcTransport { get; set; } = "Auto";
 
         [JsonPropertyName("window")]
         public WindowConfig Window { get; set; } = new WindowConfig();
@@ -116,21 +116,32 @@ namespace lambdaflow.lambdaflow.Core
 
             var options = new JsonSerializerOptions {
                 ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
+                AllowTrailingCommas = true,
+                PropertyNameCaseInsensitive = true
             };
 
             return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(configPath), options) ?? new AppConfig();
         }
 
-        private static SecurityMode ParseSecurityMode(string value) {
+        private static SecurityMode ParseSecurityMode(string? value) {
+            value ??= "Hardened";
             return string.Equals(value, "Hardened", StringComparison.OrdinalIgnoreCase)
                 ? SecurityMode.Hardened
                 : throw new InvalidOperationException($"Unsupported security mode '{value}'.");
         }
 
-        private static IPCTransport ParseIpcTransport(string value) {
+        private static IPCTransport ParseIpcTransport(string? value) {
+            value ??= "Auto";
             return value.ToLowerInvariant() switch {
-                "namedpipe" => IPCTransport.NamedPipe,
+                "auto"      => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? IPCTransport.NamedPipe
+                    : IPCTransport.StdIO,
+                // The language SDK named-pipe adapters are Windows-specific.
+                // Treat older portable configs as StdIO on Unix so the same
+                // config.json can be built and run on both supported hosts.
+                "namedpipe" => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? IPCTransport.NamedPipe
+                    : IPCTransport.StdIO,
                 "stdio"     => IPCTransport.StdIO,
                 _           => throw new InvalidOperationException($"Unsupported IPC transport '{value}'.")
             };
@@ -153,7 +164,9 @@ namespace lambdaflow.lambdaflow.Core
                 _                  => "x64"
             };
 
-            if (App.Platforms.TryGetValue(platformKey, out var platform)
+            if (App.Platforms is not null
+                && App.Platforms.TryGetValue(platformKey, out var platform)
+                && platform.Archs is not null
                 && platform.Archs.TryGetValue(archKey, out var arch))
                 return arch;
 

@@ -15,13 +15,21 @@ internal static class ProcessRunner
         Console.WriteLine($"> {command}");
 
         var startInfo = new ProcessStartInfo {
-            FileName = "cmd.exe",
-            Arguments = $"/c {command}",
+            FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        if (OperatingSystem.IsWindows()) {
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/s");
+            startInfo.ArgumentList.Add("/c");
+        }
+        else {
+            startInfo.ArgumentList.Add("-c");
+        }
+        startInfo.ArgumentList.Add(command);
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Could not start command: {command}");

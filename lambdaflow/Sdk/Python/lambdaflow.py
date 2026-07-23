@@ -52,6 +52,8 @@ from typing import Any, Callable, Optional
 
 
 __all__ = [
+    "__version__",
+    "VERSION",
     "LambdaFlowError",
     "Meta",
     "configure",
@@ -59,6 +61,7 @@ __all__ = [
     "on",
     "handle",
     "unhandle",
+    "off",
     "send",
     "emit",
     "request",
@@ -82,13 +85,15 @@ __all__ = [
 
 DEFAULT_TIMEOUT_MS = 30_000
 DEFAULT_MAX_WORKERS = 16
+__version__ = "1.3.0"
+VERSION = __version__
 RESULT_KIND_SUFFIX = ".result"
 
 
 _config = {
     "timeout_ms": DEFAULT_TIMEOUT_MS,
     "unwrap_entities": True,
-    "warn_on_unhandled": True,
+    "warn_on_unhandled": False,
     "reply_to_events": False,
 }
 
@@ -268,11 +273,16 @@ def handle(kind: str, handler: Optional[Callable[..., Any]] = None):
     return receive(kind, handler)
 
 
-def unhandle(kind: str) -> None:
+def unhandle(kind: str) -> bool:
     """
     Remove the handler for a kind.
     """
-    _handlers.pop(kind, None)
+    return _handlers.pop(kind, None) is not None
+
+
+def off(kind: str) -> bool:
+    """Alias for unhandle()."""
+    return unhandle(kind)
 
 
 def send(kind: str, payload: Any = None, *, id: Optional[str] = None, ok: Optional[bool] = None) -> None:
@@ -376,7 +386,7 @@ def respond(kind: str, id: str, payload: Any = None) -> None:
         raise ValueError("respond() requires an id.")
 
     _write_envelope({
-        "kind": kind,
+        "kind": _result_kind(kind),
         "id": id,
         "ok": True,
         "payload": payload,
@@ -393,7 +403,7 @@ def reject(kind: str, id: str, error: Any) -> None:
         raise ValueError("reject() requires an id.")
 
     _write_envelope({
-        "kind": kind,
+        "kind": _result_kind(kind),
         "id": id,
         "ok": False,
         "error": _to_error_object(error),

@@ -1,142 +1,99 @@
-# LambdaFlow — VS Code Extension
+# LambdaFlow for VS Code
 
-Build, configure, and manage **LambdaFlow** desktop applications without ever leaving VS Code.
+Create, configure, build, run, and debug LambdaFlow desktop applications on Windows and Linux without leaving VS Code.
 
-LambdaFlow lets you ship desktop apps with a web frontend and any backend language — your web UI runs inside a native WebView2 window, connected to your process via a secure named-pipe IPC channel. This extension wires the framework's tooling directly into the editor.
+## Contents
 
----
+- [Requirements](#requirements)
+- [Setup](#setup)
+- [Commands](#commands)
+- [Project wizard](#project-wizard)
+- [Configuration editor](#configuration-editor)
+- [Build and run behavior](#build-and-run-behavior)
+- [Extension development](#extension-development)
 
 ## Requirements
 
-| Requirement | Notes |
-|---|---|
-| [.NET 8 SDK](https://dotnet.microsoft.com/download) | Needed to run the LambdaFlow CLI |
-| LambdaFlow source tree | Clone from the repository and set the path in Settings |
-| Windows 10 / 11 | WebView2 is Windows-only for now |
+- VS Code 1.85+
+- .NET 8 SDK
+- LambdaFlow source tree, selected through `lambdaflow.frameworkPath`
+- Backend toolchain selected by the project
+- Linux runtime: GTK 3 and WebKitGTK 4.1
+- Windows runtime: Microsoft Edge WebView2
 
----
+## Setup
 
-## Getting started
+1. Clone LambdaFlow.
+2. Open VS Code Settings and search for `LambdaFlow`.
+3. Set `LambdaFlow: Framework Path` to the repository root.
+4. Open the LambdaFlow sidebar from the λ activity-bar icon.
 
-1. **Clone the LambdaFlow framework** to a local directory (e.g. `C:\Dev\LambdaFlow`).
-2. **Open VS Code Settings** (`Ctrl+,`) and search for `LambdaFlow`.
-3. Set **`LambdaFlow: Framework Path`** to the root of the cloned repository.
-4. Click the **λ icon** in the Activity Bar on the left to open the LambdaFlow sidebar.
+If the framework is not configured, the extension can clone it under the platform user-data directory:
 
----
-
-## Sidebar
-
-The LambdaFlow sidebar has two states:
-
-### No project open
-
-A prompt and a **+ New Project** button are shown. Click it to launch the new-project wizard.
-
-### Project open
-
-When the active workspace folder contains a `config.json` at its root, the sidebar shows:
-
-- The project name, version, and IPC transport
-- **Edit Configuration** — opens the visual config editor
-- **Build** — compiles the backend and packages the frontend into a distributable bundle
-
----
-
-## New Project wizard
-
-**Command:** `LambdaFlow: New Project`  
-**Sidebar button:** `+ New Project`
-
-Walks you through five prompts:
-
-1. **Application name** — used as the project name and default window title
-2. **Backend template language** — `C#`, `Java`, or `Python`
-3. **Target directory** — where the project will be created (defaults to `<workspace>/Apps/<name>`)
-4. **Backend compile command** — prefilled from language defaults, fully editable
-5. **Backend compile output directory** — prefilled from language defaults, fully editable
-
-The CLI runs in an integrated terminal. When it finishes, you'll be offered an **Open Folder** button to jump straight into the new project.
-
-Language defaults used by the wizard:
-
-| Language | Compile command default | Compile directory default |
-|---|---|---|
-| C# | `dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin` | `bin` |
-| Java | `mvn -q -DskipTests package` | `target` |
-| Python | `python build.py` | `bin` |
-
-> The framework path must be configured before running this command.
-
----
-
-## Configuration editor
-
-**Command:** `LambdaFlow: Edit Configuration`  
-**Sidebar button:** `Edit Configuration`
-
-Opens a visual editor for `config.json` with sections for:
-
-| Section | Fields |
-|---|---|
-| **App** | Name, version, organization, app icon path |
-| **Window** | Title, initial size, min/max size |
-| **Frontend** | Entry HTML, source folder |
-| **Backend** | Source folder, Windows x64 compile command and output directory |
-| **Security & IPC** | IPC transport (Named Pipe or StdIO); security mode is always *Hardened* |
-| **Output** | Result folder for build artifacts |
-
-Click **Save** to write changes back to `config.json`. Click **Reset** to revert to the values on disk.
-
----
-
-## Build
-
-**Command:** `LambdaFlow: Build`  
-**Sidebar button:** `Build`
-
-Runs the LambdaFlow CLI build in an integrated terminal. The CLI:
-
-1. Compiles the backend using the command in `config.json`
-2. Packs the frontend folder into `frontend.pak`
-3. Generates `lambdaflow.integrity.json` (SHA-256 manifest verified at every launch)
-4. Copies the host executable and result into the configured result folder
-
----
-
-## Extension settings
-
-| Setting | Default | Description |
-|---|---|---|
-| `lambdaflow.frameworkPath` | *(empty)* | Absolute path to the LambdaFlow source directory. Required for all commands. |
-
-Set this in **User** or **Machine** scope — not Workspace, so it works across all your projects.
-
----
+- Windows: `%APPDATA%/LambdaFlow/framework`
+- Linux: `$XDG_DATA_HOME/LambdaFlow/framework` or `~/.local/share/LambdaFlow/framework`
 
 ## Commands
 
-All commands are accessible from the Command Palette (`Ctrl+Shift+P`):
-
-| Command | Description |
+| Command | Purpose |
 |---|---|
-| `LambdaFlow: New Project` | Create a new app from a template |
-| `LambdaFlow: Build` | Build the open project |
-| `LambdaFlow: Edit Configuration` | Open the visual config editor |
+| `LambdaFlow: New Project` | Scaffold a backend/frontend project |
+| `LambdaFlow: Build` | Build for the current OS and architecture |
+| `LambdaFlow: Build & Run` | Build and launch the packaged host |
+| `LambdaFlow: Build & Debug` | Force debug config for the package and launch it |
+| `LambdaFlow: Edit Configuration` | Open the visual `config.json` editor |
 
----
+The sidebar exposes the same actions and displays the open project's name, version, and IPC transport.
 
-## How it works
+## Project wizard
 
+The wizard asks for:
+
+1. Application name
+2. Target directory
+3. Backend template: C#, Java, Python, or Other
+4. Frontend template: basic HTML or React
+
+The extension invokes the LambdaFlow CLI and creates a self-contained source project. Backend compile/runtime defaults for Windows and Linux are written to `config.json`; only the selected backend SDK is copied.
+
+## Configuration editor
+
+The visual editor preserves unknown JSON fields and supports:
+
+- App name, version, organization, and icon
+- Window title and min/initial/max sizes
+- Backend/frontend/result folders
+- Ordered prebuild commands
+- Windows x64 compile directory, compile command, run command, and run arguments
+- Linux x64 compile directory, compile command, run command, and run arguments
+- `Auto`, `NamedPipe`, or `StdIO` transport
+- DevTools, console capture, backend console, and debug log level
+
+Use **View JSON** for architecture entries or custom fields not represented by the form.
+
+## Build and run behavior
+
+The extension delegates build logic to the CLI. It does not duplicate packaging behavior.
+
+The current platform determines the output:
+
+```text
+Windows x64 → Results/<name>-<version>/windows-x64/<name>.exe
+Linux x64   → Results/<name>-<version>/linux-x64/<name>
 ```
-Activity Bar (λ)
-    └── Sidebar panel (WebviewView)
-            ├── Reads config.json from the workspace root
-            ├── Detects project: name / version / IPC transport
-            └── Sends messages → VS Code commands
-                    ├── lambdaflow.newProject  → InputBox wizard → Terminal
-                    ├── lambdaflow.openConfig  → WebviewPanel (ConfigEditorPanel)
-                    └── lambdaflow.buildProject → Terminal
+
+The configured `resultFolder` is respected. Windows executables receive `.exe`; Linux executables do not.
+
+The CLI performs prebuild commands, backend compilation, host publication, frontend packaging, icon copying, and integrity generation.
+
+## Extension development
+
+```bash
+cd Integrations/vscode-extension
+npm install
+npm run compile
 ```
 
-The sidebar refreshes automatically when `config.json` is saved or the workspace folder changes.
+Open the extension folder in VS Code and press `F5` to start an Extension Development Host.
+
+Source files are under `src/`. The runtime entrypoint uses compiled files under `out/`, so run `npm run compile` after every source change.

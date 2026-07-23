@@ -40,19 +40,39 @@ internal static class NewCommand
         var frontend      = ParseFrontend(options.Get("--frontend"));
         var defaults      = GetLanguageDefaults(language);
 
-        var compileCommand = options.Get("--backend-compile-command");
-        if (string.IsNullOrWhiteSpace(compileCommand))
-            compileCommand = defaults.CompileCommand;
+        var compileCommandOverride = options.Get("--backend-compile-command");
+        var windowsCompileCommand = string.IsNullOrWhiteSpace(compileCommandOverride)
+            ? CompileCommandFor(language, "win-x64")
+            : compileCommandOverride;
+        var linuxCompileCommand = string.IsNullOrWhiteSpace(compileCommandOverride)
+            ? CompileCommandFor(language, "linux-x64")
+            : compileCommandOverride;
 
-        var compileDirectory = options.Get("--backend-compile-directory");
-        if (string.IsNullOrWhiteSpace(compileDirectory))
+        var compileDirectoryOverride = options.Get("--backend-compile-directory");
+        var hasCompileDirectoryOverride = !string.IsNullOrWhiteSpace(compileDirectoryOverride);
+        var useTargetSpecificCompileDirectory =
+            language == ProjectLanguage.CSharp
+            && string.IsNullOrWhiteSpace(compileCommandOverride)
+            && !hasCompileDirectoryOverride;
+        var compileDirectory = compileDirectoryOverride;
+        if (!hasCompileDirectoryOverride)
             compileDirectory = defaults.CompileDirectory;
 
         if (Directory.Exists(projectDir) && Directory.EnumerateFileSystemEntries(projectDir).Any())
             throw new InvalidOperationException($"Target directory is not empty: '{projectDir}'.");
 
         Directory.CreateDirectory(projectDir);
-        CreateConfig(projectDir, appName, compileCommand!, compileDirectory!, defaults, language, frontend, debugEnabled);
+        CreateConfig(
+            projectDir,
+            appName,
+            windowsCompileCommand!,
+            linuxCompileCommand!,
+            compileDirectory!,
+            useTargetSpecificCompileDirectory,
+            defaults,
+            language,
+            frontend,
+            debugEnabled);
         CreateBackend(projectDir, frameworkRoot, language);
         CreateFrontend(projectDir, frameworkRoot, language, frontend);
 
@@ -102,7 +122,7 @@ internal static class NewCommand
         return language switch {
             ProjectLanguage.CSharp => new LanguageDefaults(
                 ExampleFolderName: "CSharp",
-                CompileCommand: "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin",
+                CompileCommand: "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin/win-x64",
                 CompileDirectory: "bin",
                 RunCommand: "Backend.exe",
                 RunArgs: Array.Empty<string>()),
@@ -124,6 +144,29 @@ internal static class NewCommand
                 CompileDirectory: ".",
                 RunCommand: "your-backend-command",
                 RunArgs: Array.Empty<string>()),
+            _ => throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported language template.")
+        };
+    }
+
+    private static string CompileCommandFor(ProjectLanguage language, string runtimeIdentifier) {
+        return language switch {
+            ProjectLanguage.CSharp =>
+                $"dotnet publish Backend.csproj -c Release -r {runtimeIdentifier} --self-contained false -o bin/{runtimeIdentifier}",
+            ProjectLanguage.Java => "mvn -q -DskipTests package",
+            ProjectLanguage.Python => runtimeIdentifier.StartsWith("linux-", StringComparison.Ordinal)
+                ? "python3 build.py"
+                : "python build.py",
+            ProjectLanguage.Other => "",
+            _ => throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported language template.")
+        };
+    }
+
+    private static string RunCommandFor(ProjectLanguage language, string platform) {
+        return language switch {
+            ProjectLanguage.CSharp => platform == "windows" ? "Backend.exe" : "Backend",
+            ProjectLanguage.Java => "java",
+            ProjectLanguage.Python => platform == "windows" ? "python" : "python3",
+            ProjectLanguage.Other => "your-backend-command",
             _ => throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported language template.")
         };
     }
@@ -164,6 +207,9 @@ internal static class NewCommand
             Path.Combine(frameworkRoot, "lambdaflow", "Hosts", "Windows"),
             Path.Combine(projectDir,    "lambdaflow", "Hosts", "Windows"));
         CopySourceOnly(
+            Path.Combine(frameworkRoot, "lambdaflow", "Hosts", "Linux"),
+            Path.Combine(projectDir,    "lambdaflow", "Hosts", "Linux"));
+        CopySourceOnly(
             Path.Combine(frameworkRoot, "lambdaflow", "Tools", "LambdaFlow.Cli"),
             Path.Combine(projectDir,    "lambdaflow", "Tools", "LambdaFlow.Cli"));
     }
@@ -186,8 +232,10 @@ internal static class NewCommand
     private static void CreateConfig(
         string           projectDir,
         string           appName,
-        string           compileCommand,
+        string           windowsCompileCommand,
+        string           linuxCompileCommand,
         string           compileDirectory,
+        bool             useTargetSpecificCompileDirectory,
         LanguageDefaults defaults,
         ProjectLanguage  language,
         FrontendTemplate frontend,
@@ -199,7 +247,7 @@ internal static class NewCommand
             organizationName          = "LambdaFlow",
             appIcon                   = "app.ico",
             securityMode              = "Hardened",
-            ipcTransport              = "NamedPipe",
+            ipcTransport              = "Auto",
             developmentBackendFolder  = "backend",
             developmentFrontendFolder = isReact ? "frontend/dist" : "frontend",
             resultFolder              = "Results",
@@ -209,7 +257,7 @@ internal static class NewCommand
                     ? new[] {
                         new {
                             name             = "Install React dependencies",
-                            command          = "if not exist node_modules\\.bin\\vite.cmd npm install",
+                            command          = "npm install --no-audit --no-fund",
                             workingDirectory = "frontend",
                             enabled          = true,
                             continueOnError  = false,
@@ -244,9 +292,31 @@ internal static class NewCommand
                 windows = new {
                     archs = new {
                         x64 = new {
-                            compileCommand,
-                            compileDirectory,
-                            runCommand = defaults.RunCommand,
+                            compileCommand = windowsCompileCommand,
+                            compileDirectory = CompileDirectoryFor("win-x64", compileDirectory, useTargetSpecificCompileDirectory),
+                            runCommand = RunCommandFor(language, "windows"),
+                            runArgs    = defaults.RunArgs
+                        },
+                        arm64 = new {
+                            compileCommand = CompileCommandFor(language, "win-arm64"),
+                            compileDirectory = CompileDirectoryFor("win-arm64", compileDirectory, useTargetSpecificCompileDirectory),
+                            runCommand = RunCommandFor(language, "windows"),
+                            runArgs    = defaults.RunArgs
+                        }
+                    }
+                },
+                linux = new {
+                    archs = new {
+                        x64 = new {
+                            compileCommand = linuxCompileCommand,
+                            compileDirectory = CompileDirectoryFor("linux-x64", compileDirectory, useTargetSpecificCompileDirectory),
+                            runCommand = RunCommandFor(language, "linux"),
+                            runArgs    = defaults.RunArgs
+                        },
+                        arm64 = new {
+                            compileCommand = CompileCommandFor(language, "linux-arm64"),
+                            compileDirectory = CompileDirectoryFor("linux-arm64", compileDirectory, useTargetSpecificCompileDirectory),
+                            runCommand = RunCommandFor(language, "linux"),
                             runArgs    = defaults.RunArgs
                         }
                     }
@@ -266,6 +336,15 @@ internal static class NewCommand
         var text = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true })
                  + Environment.NewLine;
         FileSystemTools.WriteFile(Path.Combine(projectDir, "config.json"), text);
+    }
+
+    private static string CompileDirectoryFor(
+        string runtimeIdentifier,
+        string configuredDirectory,
+        bool useTargetSpecificDirectory) {
+        return useTargetSpecificDirectory
+            ? $"bin/{runtimeIdentifier}"
+            : configuredDirectory;
     }
 
     private static void CreateBackend(string projectDir, string frameworkRoot, ProjectLanguage language) {
@@ -317,6 +396,10 @@ internal static class NewCommand
         - `platforms.windows.archs.x64.compileDirectory`
         - `platforms.windows.archs.x64.runCommand`
         - `platforms.windows.archs.x64.runArgs`
+        - `platforms.linux.archs.x64.compileCommand`
+        - `platforms.linux.archs.x64.compileDirectory`
+        - `platforms.linux.archs.x64.runCommand`
+        - `platforms.linux.archs.x64.runArgs`
 
         Your backend must read and write one JSON envelope per line using the
         selected LambdaFlow transport. Use `stderr` for logs when StdIO is the
@@ -804,14 +887,21 @@ internal static class NewCommand
         var pomPath = Path.Combine(backendDir, "pom.xml");
         if (!File.Exists(pomPath)) return;
 
-        var pomText = File.ReadAllText(pomPath);
-        if (pomText.Contains("build-helper-maven-plugin", StringComparison.Ordinal)) return;
+        var pomText = File.ReadAllText(pomPath)
+            .Replace(
+                "${project.basedir}/../../../lambdaflow/Sdk/Java",
+                "${project.basedir}/../lambdaflow/Sdk/Java",
+                StringComparison.Ordinal);
+        if (pomText.Contains("build-helper-maven-plugin", StringComparison.Ordinal)) {
+            File.WriteAllText(pomPath, pomText);
+            return;
+        }
 
         var plugin = """
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>build-helper-maven-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.1</version>
                 <executions>
                     <execution>
                         <id>add-lambdaflow-sdk-source</id>
@@ -914,11 +1004,15 @@ internal static class NewCommand
               "type": "coreclr",
               "request": "launch",
               "preLaunchTask": "LambdaFlow: build app",
-              "program": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/windows-x64/{{sanitized}}.exe",
+              "program": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/linux-x64/{{sanitized}}",
               "args": [],
-              "cwd": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/windows-x64",
+              "cwd": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/linux-x64",
               "console": "internalConsole",
-              "stopAtEntry": false
+              "stopAtEntry": false,
+              "windows": {
+                "program": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/windows-x64/{{sanitized}}.exe",
+                "cwd": "${workspaceFolder}/Results/{{sanitized}}-1.0.0/windows-x64"
+              }
             }
           ]
         }

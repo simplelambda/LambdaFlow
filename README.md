@@ -1,688 +1,753 @@
 # LambdaFlow
 
-**Build desktop apps with a web UI and the backend language you actually want.**
+Build native desktop applications with a web frontend and the backend language you choose.
 
-Most web-based desktop frameworks couple the UI to JavaScript on both sides. LambdaFlow does not. It gives you a proper native window with a full browser surface, then lets the backend be whatever executable you compile — C#, Python, Java, Go, Rust, or anything else. The two sides talk through a lightweight message bridge managed by a small C# host.
+Current stable release: **1.3.0**.
 
+LambdaFlow packages HTML, CSS, and JavaScript into a native desktop window, starts an arbitrary backend executable, and routes JSON messages between them. The backend can be C#, Python, Java, Rust, Go, C++, or any other process that can read and write line-delimited JSON.
+
+- Windows host: WinForms + Microsoft WebView2.
+- Linux host: GTK 3 + WebKitGTK 4.1 through Photino.NET.
+- Frontend: standard web technology.
+- Backend: any executable or interpreter.
+- Tooling: cross-platform .NET CLI and VS Code extension.
+
+## Table of contents
+
+- [How LambdaFlow works](#how-lambdaflow-works)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Build targets](#build-targets)
+- [Project layout](#project-layout)
+- [Configuration](#configuration)
+- [Frontend SDK](#frontend-sdk)
+- [Backend SDKs](#backend-sdks)
+- [Wire protocol](#wire-protocol)
+- [VS Code extension](#vs-code-extension)
+- [Security model](#security-model)
+- [Linux support](#linux-support)
+- [Testing Windows from Linux](#testing-windows-from-linux)
+- [Developing LambdaFlow](#developing-lambdaflow)
+- [Troubleshooting](#troubleshooting)
+- [Current scope](#current-scope)
+- [Security notice and disclaimer](#security-notice-and-disclaimer)
+
+## How LambdaFlow works
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│                       LambdaFlow native host                         │
+├──────────────────────────────────┬───────────────────────────────────┤
+│ Windows                          │ Linux                             │
+│ WinForms · WebView2              │ GTK 3 · WebKitGTK · Photino.NET   │
+├──────────────────────────────────┴───────────────────────────────────┤
+│ Web frontend · HTML · CSS · JavaScript · LambdaFlow JS SDK           │
+├──────────────────────────────────────────────────────────────────────┤
+│ IPC · Named Pipe (Windows) · StdIO (Linux)                           │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │ JSON envelopes
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │ Backend process               │
+                   │ C# · Java · Python · anything │
+                   └───────────────────────────────┘
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    LambdaFlow Host (.NET)                │
-│                                                         │
-│   ┌───────────────────┐       ┌──────────────────────┐  │
-│   │   WebView2 (Win)  │◄─────►│   IPC Bridge         │  │
-│   │   HTML / CSS / JS │       │   Named Pipe          │  │
-│   │   frontend.pak    │       │   (stdio fallback)    │  │
-│   └───────────────────┘       └──────────┬───────────┘  │
-│                                          │               │
-└──────────────────────────────────────────┼───────────────┘
-                                           │
-                              ┌────────────▼────────────┐
-                              │   Backend executable    │
-                              │   C# · Python · Java    │
-                              │   Go · Rust · anything  │
-                              └─────────────────────────┘
-```
 
-The user launches one executable — the LambdaFlow host. The host verifies the application bundle, opens the window, starts the backend, and routes messages between the two. The backend just reads lines and writes lines.
-
----
-
-## Why not Electron or Tauri?
-
-| | Electron | Tauri | LambdaFlow |
-|---|---|---|---|
-| UI technology | Web | Web | Web |
-| Backend language | Node.js only | Rust only | Any executable |
-| Runtime bundled | Chromium + Node | OS WebView | OS WebView |
-| Bundle size | Large | Small | Small |
-| Backend freedom | No | No | Yes |
-
-LambdaFlow is the right tool when the backend needs to be something specific — a Python ML stack, a Java service, a compiled C# library — and you want the UI to stay web-based without rewriting business logic in JavaScript.
-
----
+The user launches the packaged host. The host verifies the SHA-256 integrity manifest, opens the native window, starts the configured backend, and forwards messages in both directions. LambdaFlow does not embed an HTTP server and does not force the backend to use JavaScript.
 
 ## Features
 
-- **Language-agnostic backend** — compile your backend in any language; LambdaFlow runs the resulting executable.
-- **Language-aware scaffolding** — `lambdaflow new` can scaffold C#, Java, or Python templates and copies only the selected language example.
-- **Web frontend** — standard HTML, CSS, and JavaScript served from a secure local origin with a strict Content Security Policy.
-- **Native window** — proper OS window via WinForms + WebView2, with title, size, min/max, and icon configured from `config.json`.
-- **Named Pipe IPC** — fast, full-duplex, per-run private pipe on Windows; stdin/stdout fallback for portability.
-- **Unified SDK ergonomics** — C#, Java, and Python SDKs expose the same core concepts (`receive`/`send`/`run`).
-- **Editable build defaults at creation time** — choose language defaults for backend compile command and output directory, then customize them in the wizard.
-- **Integrity verification** — SHA-256 manifest checked before the app starts; tampered bundles are refused.
-- **Single config** — one `config.json` describes the app name, window, build commands, and platform targets.
-- **CLI tooling** — `lambdaflow new` scaffolds a project; `lambdaflow build` compiles, packages, and signs the bundle.
-- **VS Code integration** — run and debug with F5, no manual steps.
-
----
+- Backend-language independence.
+- Native Windows and Linux windows using each operating system's webview stack.
+- A plain JavaScript frontend SDK usable with HTML, React, Vue, Svelte, or other web tooling.
+- Aligned C#, Java, and Python backend SDKs.
+- Request/response, fire-and-forget events, error envelopes, and typed entity payloads.
+- `config.json` for application, window, build, runtime, debug, platform, and architecture settings.
+- C#, Java, Python, and generic project templates.
+- Basic HTML and Vite + React frontend templates.
+- Cross-compilation of Windows artifacts from Linux with the .NET SDK.
+- VS Code project creation, configuration editor, build, run, and debug commands.
+- SHA-256 bundle verification and a restricted local frontend origin.
 
 ## Requirements
 
-- Windows (Linux and macOS hosts are planned)
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (installed on Windows 11 by default)
+### Common development requirements
 
----
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- Git
+- The compiler or runtime required by the selected backend:
+  - C#: .NET 8 SDK/runtime
+  - Java: JDK 17+ and Maven
+  - Python: Python 3.10+
+  - React template: Node.js and npm
 
-## Quick Start
+The LambdaFlow host is published self-contained. A backend may still require its own runtime unless its compile command produces a self-contained executable.
 
-**1. Create a new project**
+### Windows runtime
 
-```powershell
-dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- new MyApp Apps/MyApp --framework . --language csharp
+- Windows 10 or Windows 11, x64 or arm64
+- [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
+  Windows 11 normally includes it.
+
+### Linux runtime
+
+- A glibc-based desktop distribution
+- GTK 3
+- WebKitGTK 4.1
+
+Package names vary by distribution:
+
+```bash
+# Arch Linux / CachyOS
+sudo pacman -S dotnet-sdk gtk3 webkit2gtk-4.1
+
+# Debian / Ubuntu
+sudo apt install dotnet-sdk-8.0 libgtk-3-0 libwebkit2gtk-4.1-0
+
+# Fedora
+sudo dnf install dotnet-sdk-8.0 gtk3 webkit2gtk4.1
 ```
 
-This generates a complete project at `Apps/MyApp/` with a working backend, frontend, and VS Code configuration.
+Only runtime libraries are needed to launch a packaged app. Development packages are not required because the Linux native bridge is supplied by the Photino.NET package.
 
-Supported template languages:
+## Quick start
 
-- `--language csharp`
-- `--language java`
-- `--language python`
+### 1. Create a project
 
-Optional creation-time overrides:
+From the LambdaFlow repository:
 
-- `--backend-compile-command "..."`
-- `--backend-compile-directory "..."`
-
-**2. Build the app**
-
-```powershell
-dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- build Apps/MyApp --framework .
+```bash
+dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- \
+  new MyApp Apps/MyApp \
+  --framework . \
+  --language csharp \
+  --frontend basic
 ```
 
-Output is written to:
+Supported backend templates:
 
+- `csharp`
+- `java`
+- `python`
+- `other`
+
+Supported frontend templates:
+
+- `basic`
+- `react`
+
+Add `--self-contained` to copy the framework sources required by the generated project into that project.
+
+### 2. Build for the current operating system
+
+```bash
+dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- \
+  build Apps/MyApp \
+  --framework .
 ```
+
+On Linux x64 the result is:
+
+```text
+Apps/MyApp/Results/MyApp-1.0.0/linux-x64/
+```
+
+On Windows x64 the result is:
+
+```text
 Apps/MyApp/Results/MyApp-1.0.0/windows-x64/
 ```
 
-**3. Run it**
+### 3. Run
+
+Linux:
+
+```bash
+./Apps/MyApp/Results/MyApp-1.0.0/linux-x64/MyApp
+```
+
+Windows PowerShell:
 
 ```powershell
-.\Apps\MyApp\Results\MyApp-1.0.0\windows-x64\lambdaflow.windows.exe
+.\Apps\MyApp\Results\MyApp-1.0.0\windows-x64\MyApp.exe
 ```
 
----
+## Build targets
 
-## Scaffold Language Templates
+If `--target` is omitted, the CLI selects the current OS and CPU architecture.
 
-`lambdaflow new` scaffolds from the `Examples/<Language>` template and copies only that language's backend and frontend.
+| Target | CLI value | Host | Output folder |
+|---|---|---|---|
+| Windows x64 | `windows-x64` | WebView2 | `windows-x64/` |
+| Windows arm64 | `windows-arm64` | WebView2 | `windows-arm64/` |
+| Linux x64 | `linux-x64` | GTK/WebKitGTK | `linux-x64/` |
+| Linux arm64 | `linux-arm64` | GTK/WebKitGTK | `linux-arm64/` |
 
-| Language | CLI value | Backend template source | Default compile command | Default compile directory | Runtime launch (`runCommand` + `runArgs`) |
-|---|---|---|---|---|---|
-| C# | `csharp` | `Examples/CSharp/backend` | `dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin` | `bin` | `Backend.exe` + `[]` |
-| Java | `java` | `Examples/Java/backend` | `mvn -q -DskipTests package` | `target` | `java` + `[-jar, Backend.jar]` |
-| Python | `python` | `Examples/Python/backend` | `python build.py` | `bin` | `python` + `[backend.py]` |
+Examples:
 
-Notes:
+```bash
+# Native Linux build
+dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- \
+  build Apps/MyApp --framework . --target linux-x64
 
-- Build artifacts (`bin`, `obj`, `target`, `Results`, `__pycache__`) are excluded when copying templates.
-- The generated `config.json` is pre-filled with compile/runtime defaults for the selected language.
-- The scaffold stores the selected language SDK helper under `lambdaflow/Sdk/<Language>/` and wires the backend template to use that shared project-level location.
-
----
-
-## Multi-Language Examples
-
-Three complete examples are included and kept feature-aligned:
-
-- `Examples/CSharp`
-- `Examples/Java`
-- `Examples/Python`
-
-All three share the same frontend and expose the same backend tools, including:
-
-- text transforms (`uppercase`, `lowercase`, `reverse`)
-- counters (`charcount`, `wordcount`)
-- number converter (`numberconverter`)
-- extended analyzer (`textstats`)
-- typed-object demo (`describeDog`) using the ontology entity format
-
----
-
-## VS Code
-
-The generated project includes `.vscode/tasks.json` and `.vscode/launch.json`. Open the project folder in VS Code and:
-
-- **Build**: `Ctrl+Shift+B` → `LambdaFlow: build app`
-- **Run and debug**: `F5` — builds the app and launches it with the debugger attached to the host.
-
-To create a new project from VS Code (without a terminal), open the LambdaFlow repository folder, then run **LambdaFlow: New Project** from the sidebar or Command Palette.
-
-The wizard asks for:
-
-1. Application name
-2. Backend template language (`C#`, `Java`, `Python`)
-3. Target directory
-4. Backend compile command (pre-filled by language, editable)
-5. Backend compile output directory (pre-filled by language, editable)
-
-After generation, you can still edit everything in `config.json` with **LambdaFlow: Edit Configuration**.
-
----
-
-## Project Layout
-
-After `lambdaflow new`, your project looks like this:
-
+# Cross-compile Windows from Linux
+dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- \
+  build Apps/MyApp --framework . --target windows-x64
 ```
+
+The target must exist under `platforms` in `config.json`. Cross-compilation proves that the Windows host and backend compile, but a Windows installation or VM is still required to exercise WebView2 and Windows named-pipe behavior.
+
+## Project layout
+
+Generated source project:
+
+```text
 MyApp/
-  config.json          App metadata, window settings, build commands
-  backend/
-    ...                Language template files (C#, Java, or Python)
-  frontend/
-    ...                Template frontend copied from selected example
-  lambdaflow/
-    Sdk/
-      ...              Only the selected language helper is copied here
-  .vscode/
-    tasks.json         Build task
-    launch.json        F5 launch config
-  Results/             Build output (generated, not committed)
+├── config.json
+├── backend/
+├── frontend/
+├── lambdaflow/
+│   └── Sdk/
+│       └── <selected backend SDK>
+├── .vscode/
+│   ├── launch.json
+│   ├── settings.json
+│   └── tasks.json
+└── Results/                 generated
 ```
 
-Backend template details by language:
+Packaged application:
 
-- C#: `Backend.csproj`, `Program.cs` (SDK reference points to `../lambdaflow/Sdk/CSharp/LambdaFlow.cs`)
-- Java: `pom.xml`, `src/main/java/example/Backend.java` (Maven adds `../lambdaflow/Sdk/Java` as a source folder)
-- Python: `backend.py`, `build.py` (runtime import path points to `../lambdaflow/Sdk/Python/lambdaflow.py`)
-
-The built app looks like this:
-
-```
-Results/MyApp-1.0.0/windows-x64/
-  lambdaflow.windows.exe   The host you distribute
-  lambdaflow.integrity.json
-  frontend.pak             ZIP of the frontend folder
-  config.json
-  backend/
-    Backend.exe            Your compiled backend
+```text
+Results/MyApp-1.0.0/linux-x64/
+├── MyApp                    MyApp.exe on Windows
+├── config.json
+├── frontend.pak
+├── lambdaflow.integrity.json
+├── backend/
+│   └── backend runtime files
+└── host runtime files
 ```
 
----
+The project generator copies only the selected backend SDK. The frontend always receives `lambdaflow.js`.
 
-## Using Non-Native Languages
+## Configuration
 
-If your backend language is not scaffolded natively (for example C, C++, or Go), use this generic workflow:
-
-1. Scaffold a project with any template to get the host, frontend, VS Code files, and `config.json`.
-2. Replace the `backend/` folder contents with your own source/build files.
-3. Set backend build/runtime settings in `config.json`:
+`config.json` is the source of truth for development and packaged runtime settings.
 
 ```json
-"platforms": {
-  "windows": {
-    "archs": {
-      "x64": {
-        "compileCommand": "<your build command>",
-        "compileDirectory": "<folder that contains runtime backend files>",
-        "runCommand": "<executable or interpreter>",
-        "runArgs": ["<arg1>", "<arg2>"]
+{
+  "appName": "MyApp",
+  "appVersion": "1.0.0",
+  "organizationName": "MyCompany",
+  "appIcon": "app.ico",
+  "securityMode": "Hardened",
+  "ipcTransport": "Auto",
+  "developmentBackendFolder": "backend",
+  "developmentFrontendFolder": "frontend",
+  "resultFolder": "Results",
+  "frontendInitialHTML": "index.html",
+  "build": {
+    "preBuild": [
+      {
+        "name": "Build frontend",
+        "command": "npm run build",
+        "workingDirectory": "frontend",
+        "enabled": true,
+        "continueOnError": false,
+        "timeoutSeconds": 120
+      }
+    ]
+  },
+  "debug": {
+    "enabled": false,
+    "frontendDevTools": false,
+    "openFrontendDevToolsOnStart": false,
+    "captureFrontendConsole": false,
+    "showBackendConsole": false,
+    "backendLogLevel": "info"
+  },
+  "platforms": {
+    "windows": {
+      "archs": {
+        "x64": {
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin/win-x64",
+          "compileDirectory": "bin/win-x64",
+          "runCommand": "Backend.exe",
+          "runArgs": []
+        }
+      }
+    },
+    "linux": {
+      "archs": {
+        "x64": {
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-x64 --self-contained false -o bin/linux-x64",
+          "compileDirectory": "bin/linux-x64",
+          "runCommand": "Backend",
+          "runArgs": []
+        }
       }
     }
+  },
+  "window": {
+    "title": "My App",
+    "width": 1000,
+    "height": 700,
+    "minWidth": 640,
+    "minHeight": 480,
+    "maxWidth": 0,
+    "maxHeight": 0
   }
 }
 ```
 
-4. Implement the LambdaFlow protocol in your backend process:
-   - read one JSON message per line,
-   - handle by `kind`,
-   - write one JSON response per line,
-   - respect `id` for request/response correlation.
-5. Support transport selection:
-   - `NamedPipe` when `LAMBDAFLOW_IPC_TRANSPORT=NamedPipe` and `LAMBDAFLOW_PIPE_NAME` is provided,
-   - stdin/stdout fallback otherwise.
+Important rules:
 
-You do not need a language-specific LambdaFlow SDK to integrate. The line-based JSON protocol is the contract.
+- `ipcTransport: "Auto"` selects named pipes on Windows and StdIO on Linux.
+- An older config containing `NamedPipe` is automatically treated as StdIO on Linux.
+- With StdIO, the backend must reserve stdout for protocol messages and write logs to stderr.
+- `compileCommand` runs inside `developmentBackendFolder`.
+- `compileDirectory` is relative to that backend folder and is copied into the package.
+- Use a distinct `compileDirectory` per native target (as generated for C#) so a package cannot inherit binaries from a previous target.
+- `runCommand` is resolved inside the packaged `backend/` directory first, then through `PATH`.
+- `runArgs` is an argument array; no shell parsing is applied at runtime.
+- Prebuild, backend, frontend, and result paths must remain inside the project.
+- `maxWidth` and `maxHeight` set to `0` mean no maximum.
+- Prebuild commands run on the machine performing the build. Use portable commands when the same project is built on multiple operating systems.
 
----
+## Frontend SDK
 
-## Frontend API
-
-LambdaFlow injects two low-level bridge functions into the browser context:
-
-- `send(string)`
-- `window.receive(string)`
-
-Those functions are the raw bridge between WebView and host. Application code should use the provided `lambdaflow.js` SDK instead of writing JSON plumbing by hand. The SDK exposes the same concepts as the backend SDKs:
-
-- `LambdaFlow.send(kind, payload)` for fire-and-forget messages.
-- `LambdaFlow.request(kind, payload, timeoutOrOptions)` for request/response calls.
-- `LambdaFlow.receive(kind, handler)` / `LambdaFlow.on(kind, handler)` for backend-to-frontend events.
-- `LambdaFlow.handle(kind, handler)` for backend-to-frontend requests that expect a response.
-- `LambdaFlow.entity(...)`, `requestEntity(...)`, and `sendEntity(...)` for typed entity payloads.
-
-The runtime SDK stays as plain JavaScript so it works in HTML, React, Vite, or any other frontend. TypeScript projects can use the declarations in `lambdaflow/Sdk/JavaScript/lambdaflow.d.ts`; the optional `lambdaflowApi.ts` file is only a typed convenience wrapper around `window.LambdaFlow`, not a separate protocol.
+Load the SDK before application scripts:
 
 ```html
 <script src="lambdaflow.js"></script>
-<script>
-  // Fire-and-forget
-  LambdaFlow.send("greet", { name: "world" });
-
-  // Request/response
-  const res = await LambdaFlow.request("uppercase", { text: "hello" });
-  console.log(res.text);
-
-  // Ontology entity payload
-  const dog = { name: "Rex", age: 4, breed: "Labrador" };
-  const reply = await LambdaFlow.requestEntity("describeDog", "animals.dog", dog);
-  console.log(reply);
-</script>
+<script src="app.js"></script>
 ```
 
-If you prefer handling inbound events directly, register handlers with:
+The host exposes the low-level functions `window.send(rawJson)` and `window.receive(rawJson)`. Application code should use `window.LambdaFlow`.
+
+### Requests
 
 ```js
-LambdaFlow.receive("eventName", payload => {
+const result = await LambdaFlow.request(
+  'uppercase',
+  { text: 'Hello' },
+  { timeoutMs: 5000 }
+);
+```
+
+`request` correlates responses by `id`, supports timeouts and `AbortSignal`, and rejects with `LambdaFlow.Error` when the backend returns `ok: false`.
+
+### Events
+
+```js
+LambdaFlow.send('telemetry.clicked', { button: 'save' });
+
+const unsubscribe = LambdaFlow.on('backend.progress', progress => {
+  console.log(progress);
+});
+
+LambdaFlow.once('backend.ready', payload => {
   console.log(payload);
+});
+
+unsubscribe();
+```
+
+`emit` is an alias for `send`; `receive` is an alias for `on`. `onAny` subscribes to all event kinds.
+
+### Frontend request handlers
+
+Backends can request information from the frontend:
+
+```js
+const unregister = LambdaFlow.handle('ui.getTheme', async () => {
+  return { theme: document.documentElement.dataset.theme };
 });
 ```
 
----
+The SDK sends a correlated success or error response automatically. Use `unhandle(kind)` to remove the handler.
 
-## Backend Protocol
+### Entities
 
-The backend is a normal executable. It reads one message per line from the active transport and writes one response per line back.
+```js
+const dog = LambdaFlow.entity('animals.dog', {
+  name: 'Rex',
+  age: 4
+});
 
-Message envelope (JSON Lines):
-
-```json
-{ "kind": "<routing-key>", "id": "<uuid|null>", "payload": <any-json-or-entity|null> }
+await LambdaFlow.requestEntity('describeDog', 'animals.dog', dog.data);
 ```
 
-Behavior:
-
-- If `id` is present, the message is a request and the backend should always answer once.
-- If `id` is absent, the message is an event; answering is optional.
-
-Recommended backend SDK methods (aligned across languages):
-
-- `receive(kind, handler)` / `Receive(kind, handler)`
-- `send(kind, payload)` / `Send(kind, payload)`
-- `run()` / `Run()`
-
-Backward-compatible aliases (`on` / `On`) are still available.
-
-### Named Pipe (default on Windows)
-
-The host sets two environment variables before starting the backend:
-
-```
-LAMBDAFLOW_IPC_TRANSPORT=NamedPipe
-LAMBDAFLOW_PIPE_NAME=lambdaflow-<random-guid>
-```
-
-Connect to the pipe, then read and write line-terminated strings:
-
-```csharp
-// C# example
-using var pipe   = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-using var reader = new StreamReader(pipe, Encoding.UTF8);
-using var writer = new StreamWriter(pipe, Encoding.UTF8) { AutoFlush = true };
-
-await pipe.ConnectAsync(10_000);
-
-string? line;
-while ((line = await reader.ReadLineAsync()) is not null) {
-    var req  = JsonSerializer.Deserialize<Request>(line);
-    var resp = Handle(req);
-    await writer.WriteLineAsync(JsonSerializer.Serialize(resp));
-}
-```
-
-### stdin / stdout fallback
-
-If `LAMBDAFLOW_IPC_TRANSPORT` is not `NamedPipe`, read from `Console.In` and write to `Console.Out`:
-
-```csharp
-while (Console.ReadLine() is { } line) {
-    var req  = JsonSerializer.Deserialize<Request>(line);
-    var resp = Handle(req);
-    Console.WriteLine(JsonSerializer.Serialize(resp));
-}
-```
-
-Any language that can connect to a Windows named pipe or read/write stdin/stdout can be the backend.
-
----
-
-## Universal Ontology (Entity v1)
-
-LambdaFlow supports an optional payload convention for strongly-typed object exchange across languages:
+Entity shape:
 
 ```json
 {
   "$type": "animals.dog",
   "$v": 1,
-  "data": {
-    "name": "Rex",
-    "age": 4,
-    "breed": "Labrador"
+  "data": {}
+}
+```
+
+Entities are unwrapped by default before delivery to handlers. Metadata still exposes the type, version, raw payload, envelope, and receive time.
+
+### Complete public frontend API
+
+```text
+version
+configure
+isHostAvailable / isAvailable
+ensureHostAvailable / ensureAvailable
+send / emit / sendEnvelope
+request / requestEntity
+on / receive / onAny / once / off
+handle / unhandle
+respond / reject
+entity / sendEntity
+isEntity / unwrapEntity / entityType / entityVersion
+receiveRaw
+pendingCount / clearHandlers / destroy
+```
+
+TypeScript declarations are in `lambdaflow/Sdk/JavaScript/lambdaflow.d.ts`. The optional `lambdaflowApi.ts` module exposes the same operations as importable functions.
+
+## Backend SDKs
+
+Canonical SDK files:
+
+| Language | File |
+|---|---|
+| C# | `lambdaflow/Sdk/CSharp/LambdaFlow.cs` |
+| Java | `lambdaflow/Sdk/Java/LambdaFlow.java` |
+| Python | `lambdaflow/Sdk/Python/lambdaflow.py` |
+
+The APIs use each language's naming conventions but share the same concepts:
+
+| Concept | C# | Java | Python |
+|---|---|---|---|
+| SDK version | `Version` | `VERSION` | `__version__`, `VERSION` |
+| Configure | `Configure` | `configure` | `configure` |
+| Register event/request | `Receive`, `On`, `Handle` | `receive`, `on`, `handle` | `receive`, `on`, `handle` |
+| Remove handler | `Unhandle`, `Off` | `unhandle`, `off` | `unhandle`, `off` |
+| Send event | `Send`, `Emit` | `send`, `emit` | `send`, `emit` |
+| Request frontend | `Request`, `RequestAsync` | `request`, `requestAsync` | `request` |
+| Manual response | `Respond`, `Reject` | `respond`, `reject` | `respond`, `reject` |
+| Entities | `Entity`, `SendEntity`, `RequestEntityAsync` | `entity`, `sendEntity`, `requestEntityAsync` | `entity`, `send_entity`, `request_entity` |
+| Run loop | `Run`, `RunAsync`, `Stop` | `run`, `stop` | `run`, `stop` |
+| Pending requests | `PendingCount` | `pendingCount` | `pending_count` |
+
+C#:
+
+```csharp
+LambdaFlow.Receive<TextRequest, TextResponse>(
+    "uppercase",
+    request => new(request.Text.ToUpperInvariant()));
+
+LambdaFlow.Run();
+```
+
+Python:
+
+```python
+import lambdaflow as lf
+
+@lf.handle("uppercase")
+def uppercase(request):
+    return {"text": request["text"].upper()}
+
+lf.run()
+```
+
+Java:
+
+```java
+LambdaFlow.handle(
+    "uppercase",
+    TextRequest.class,
+    request -> new TextResponse(request.text.toUpperCase()));
+
+LambdaFlow.run();
+```
+
+Best practices:
+
+- Register handlers before starting the run loop.
+- Return a value from a handler instead of manually responding.
+- Throw/raise an error to produce an `ok: false` response.
+- Use `send` for events and `request` only when a response is required.
+- Use entity payloads only when type identity or schema versioning adds value.
+- Put diagnostics on stderr when using StdIO.
+- Keep handlers independent of the transport; SDKs choose it from environment variables.
+
+## Wire protocol
+
+One UTF-8 JSON object is sent per line.
+
+Request:
+
+```json
+{
+  "kind": "uppercase",
+  "id": "9d42...",
+  "payload": { "text": "hello" }
+}
+```
+
+Success:
+
+```json
+{
+  "kind": "uppercase.result",
+  "id": "9d42...",
+  "ok": true,
+  "payload": { "text": "HELLO" }
+}
+```
+
+Failure:
+
+```json
+{
+  "kind": "uppercase.result",
+  "id": "9d42...",
+  "ok": false,
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "text is required",
+    "details": {}
   }
 }
 ```
 
-Notes:
+Rules:
 
-- Backends can send entity payloads with `SendEntity(...)` / `sendEntity(...)` / `send_entity(...)`.
-- Frontends can build entity payloads with `LambdaFlow.entity(...)` and `LambdaFlow.requestEntity(...)`.
-- C#, Java, and Python SDKs auto-unwrap entity payloads before deserializing request objects, so handlers stay clean.
+- `kind` is a required non-empty routing key.
+- `id` is present when a response is expected.
+- Responses reuse the same `id`.
+- SDK-generated response kinds append `.result`.
+- `ok: false` and `error` represent a failed request.
+- Event envelopes may omit `id` and `ok`.
+- New integrations should use the top-level `error` object. SDKs still accept the legacy `payload.error` shape.
 
-Formal schema:
+Transport environment:
 
-- `lambdaflow/Ontology/lambdaflow.ontology.v1.schema.json`
-
----
-
-## Roadmap
-
-- Signed integrity manifests (private key at build time, public key embedded in host)
-- Installer generation (MSIX / WiX)
-- Linux host (WebKitGTK + Unix domain sockets)
-- macOS host (WKWebView + Unix domain sockets)
-- Higher-level backend SDKs for additional languages (Go, Rust)
-
----
-
----
-
-# Technical Reference
-
-This section covers the internal design, security model, IPC choices, and packaging strategy in full detail. It is aimed at contributors and users who need to understand or extend LambdaFlow.
-
----
-
-## Architecture
-
-### Process model
-
-LambdaFlow separates three concerns into three artifacts:
-
-| Artifact | Role |
-|---|---|
-| `lambdaflow.windows.exe` | Host: window, WebView, IPC bridge, lifecycle |
-| `frontend.pak` | Frontend: ZIP of HTML/CSS/JS served from a controlled origin |
-| `backend/Backend.exe` | Backend: arbitrary executable compiled by the developer |
-
-The host is the only entrypoint. It owns startup, shutdown, and all communication between the other two. The frontend and backend never communicate directly.
-
-### Startup sequence
-
-```
-1. IntegrityVerifier.VerifyApplicationBundle()
-     - Read lambdaflow.integrity.json
-     - SHA-256 every file listed in the manifest
-     - Abort on any mismatch or missing file
-
-2. IPCBridge.Initialize()
-     - Create a random Named Pipe (Windows ACL: current user only)
-     - Start Backend.exe with LAMBDAFLOW_PIPE_NAME env var
-     - Wait for backend to connect
-     - Start async send/receive loops
-
-3. WebView.Initialize(ipcBridge)
-     - Create WinForms window from config.json
-     - Initialize WebView2 environment
-     - Inject window.send and window.receive stubs
-     - Register WebResourceRequested handler for frontend.pak
-     - Bind WebMessageReceived → IPCBridge.SendMessageToBackend
-
-4. WebView.Navigate("index.html")
-     - Resolved inside frontend.pak via virtual origin
-     - CSP headers applied on every response
-
-5. Application.Run()
-     - Message loop, window handles events
-     - On close: IPC bridge disposed, backend process terminated
+```text
+LAMBDAFLOW_IPC_TRANSPORT=NamedPipe
+LAMBDAFLOW_PIPE_NAME=<private-name>
 ```
 
-### Message flow
+If these variables are absent, SDKs use stdin/stdout.
 
-```
-Frontend (JS)                 Host (C#)               Backend (any language)
-    │                             │                             │
-    │── send(msg) ───────────────►│                             │
-    │                             │── pipe.WriteLine(msg) ─────►│
-    │                             │                             │── process(msg)
-    │                             │◄── pipe.ReadLine(resp) ─────│
-    │◄── window.receive(resp) ───│                             │
-    │                             │                             │
-```
+## VS Code extension
 
-All messages are strings and line-terminated in both directions. The optional Entity v1 ontology adds a shared typed-object convention across frontend and backend languages.
+The extension is under `Integrations/vscode-extension`.
 
----
+Commands:
 
-## Frontend Loading
+- `LambdaFlow: New Project`
+- `LambdaFlow: Build`
+- `LambdaFlow: Build & Run`
+- `LambdaFlow: Build & Debug`
+- `LambdaFlow: Edit Configuration`
 
-The frontend is served through a virtual application origin:
+It works on Windows and Linux. Build and run select the current OS/architecture, locate the correct output folder, and launch `.exe` only on Windows.
 
-```
-https://app.lambdaflow.localhost/
-```
+The configuration editor supports:
 
-WebView2 intercepts every request to this origin via `AddWebResourceRequestedFilter` and resolves the path inside `frontend.pak` (a ZIP archive). No file is ever read directly from disk at runtime; the PAK is sealed at build time.
+- App metadata and icon
+- Window size limits
+- Frontend/backend folders
+- Ordered prebuild commands
+- Windows x64 compile and runtime settings
+- Linux x64 compile and runtime settings
+- Auto, NamedPipe, and StdIO transport selection
+- Debug and frontend console capture settings
 
-The host DNS-maps `app.lambdaflow.localhost` to `0.0.0.0` via `--host-resolver-rules` to prevent any real network lookup for that hostname.
+Development:
 
-Every response includes:
-
-```
-Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
-                         style-src 'self' 'unsafe-inline'; img-src 'self' data:;
-                         font-src 'self' data:; connect-src 'none';
-                         base-uri 'self'; frame-ancestors 'none'
-X-Content-Type-Options: nosniff
-Content-Type: <extension-based MIME>
+```bash
+cd Integrations/vscode-extension
+npm install
+npm run compile
 ```
 
-`connect-src 'none'` means the frontend cannot make arbitrary network requests. If an application needs network access, it must route through the backend, which is an intentional design constraint.
+Press `F5` in VS Code with the extension folder selected to open an Extension Development Host.
 
-Path traversal is blocked at two points: in `GetPakRelativePath` (rejects `..` segments before looking up the PAK entry) and in `IntegrityVerifier` (rejects manifest paths that are absolute or contain `..`).
+## Security model
 
----
+LambdaFlow currently supports only `securityMode: "Hardened"`.
 
-## IPC Design
+- The CLI writes `lambdaflow.integrity.json` with SHA-256 hashes for all packaged files.
+- The host refuses to start if a listed file is missing or modified.
+- Frontend files are served from a private local origin, not directly from arbitrary filesystem URLs.
+- Path traversal outside `frontend.pak` is rejected.
+- The frontend receives a restrictive Content Security Policy.
+- Windows disables host objects, context menus, browser shortcuts, status UI, and DevTools unless debug settings allow them.
+- Linux disables context menus and DevTools unless debug settings allow them.
+- Windows named pipes are private to the current user.
 
-### Named Pipe (Windows default)
+The integrity manifest detects accidental or post-build modification; it is not a publisher signature. An attacker who can replace both application files and the manifest can recalculate hashes. Add platform code signing for release authenticity.
 
-A new random pipe name (`lambdaflow-<GUID>`) is created for each run. The backend receives the name via environment variable and connects within a timeout. The pipe is created with `PipeOptions.CurrentUserOnly`, which restricts access to the current user's SID at the OS level — no other user on the machine can connect to the pipe, even if they discover the GUID name. The random name further reduces the attack surface by making enumeration impractical.
+## Linux support
 
-The host uses a `Channel<string>`-backed send queue so frontend messages are serialized before writing to the pipe. The receive loop runs on a separate task.
+LambdaFlow uses one Linux implementation rather than separate Debian, Arch, and Red Hat code paths.
 
-### stdio fallback
+The managed host and native Photino bridge are the same across distributions for a given CPU architecture. Distribution-specific work is limited to installing GTK 3 and WebKitGTK 4.1 packages.
 
-When `ipcTransport` is set to `StdIO` in `config.json`, the backend's standard streams are redirected and used as the message channel. This is the universal fallback: any language that supports reading from stdin and writing to stdout can use it. The tradeoff is that backend diagnostic output (logs, errors) must go to stderr when using this transport, not stdout, because stdout is the message channel.
+Supported Linux characteristics:
 
-### Transport selection
+- x64 and arm64 publish targets
+- X11 and Wayland environments supported by GTK/WebKitGTK
+- glibc-based distributions
+- StdIO backend transport
+- Same `frontend.pak`, config, integrity, JavaScript API, and SDK protocol as Windows
 
-The transport is set in `config.json` under `ipcTransport`:
+Linux does not use WebView2 or Windows named pipes. `ipcTransport: "Auto"` accounts for this difference.
+
+## Testing Windows from Linux
+
+Three levels of verification are useful:
+
+1. Cross-build on Linux:
+
+   ```bash
+   dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- \
+     build Apps/MyApp --framework . --target windows-x64
+   ```
+
+   This validates C# compilation, NuGet resolution, backend target output, packaging, and integrity generation.
+
+2. Automated protocol tests on Linux:
+
+   Test the SDK and backend logic over StdIO without a GUI.
+
+3. Functional Windows VM:
+
+   Use KVM/QEMU with libvirt and virt-manager on CachyOS:
+
+   ```bash
+   sudo pacman -S qemu-full libvirt virt-manager edk2-ovmf swtpm dnsmasq
+   sudo systemctl enable --now libvirtd
+   ```
+
+   Create a Windows 11 VM, install WebView2 if it is absent, share or copy the `windows-x64` output, and run the packaged executable.
+
+KVM is the Linux equivalent appropriate for this test. Windows Sandbox is lightweight but runs only on a Windows host. Wine is useful for some Win32 programs but is not a faithful validation environment for WebView2, WinForms, and Windows named-pipe integration.
+
+For repeatable CI, keep a Windows VM snapshot or add a native Windows CI runner.
+
+## Developing LambdaFlow
+
+Repository map:
+
+```text
+lambdaflow/
+├── Core/                  shared config, backend process, integrity, interfaces
+├── Hosts/
+│   ├── Windows/           WinForms + WebView2 + named pipe/StdIO
+│   └── Linux/             Photino + GTK/WebKitGTK + StdIO
+├── Sdk/
+│   ├── CSharp/
+│   ├── Java/
+│   ├── JavaScript/
+│   └── Python/
+├── Tools/LambdaFlow.Cli/  new/build commands
+└── Ontology/              entity schema
+
+Integrations/
+├── vscode-extension/      extension source and compiled output
+└── vscode/                repository task/launch templates
+
+Examples/
+├── CSharp/
+├── Java/
+└── Python/
+```
+
+Build checks:
+
+```bash
+dotnet build lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj -c Release
+dotnet build lambdaflow/Hosts/Linux/lambdaflow.linux.csproj -c Release
+dotnet build lambdaflow/Hosts/Windows/lambdaflow.windows.csproj -c Release
+
+cd Integrations/vscode-extension
+npm install
+npm run compile
+```
+
+Protocol smoke test:
+
+```bash
+printf '%s\n' \
+  '{"kind":"uppercase","id":"smoke-1","payload":{"text":"hello"}}' \
+  | ./backend-command
+```
+
+Expected logical response:
 
 ```json
-"ipcTransport": "NamedPipe"   // recommended
-"ipcTransport": "StdIO"       // fallback
+{"kind":"uppercase.result","id":"smoke-1","ok":true,"payload":{"text":"HELLO"}}
 ```
 
-The backend detects the active transport via the `LAMBDAFLOW_IPC_TRANSPORT` environment variable. If absent or not `NamedPipe`, it should fall back to stdin/stdout.
+Read `AGENTS.md` before making agent-assisted changes. It contains the minimal architecture, public APIs, invariants, and task-specific file map.
 
-### Future transports
+## Troubleshooting
 
-| Platform | Recommended default | Rationale |
-|---|---|---|
-| Windows | Named Pipe | Native, fast, ACL-controllable |
-| Linux | Unix domain socket | POSIX standard, file-permission ACL |
-| macOS | Unix domain socket | Same as Linux |
-| Android | Embedded service model | Sandboxing makes child executables impractical |
+### Linux reports that WebKitGTK is missing
 
-Shared memory is not planned as a base transport. It requires its own framing, synchronization, and crash handling — the line-oriented model covers the common case cleanly. Shared memory could be added as an opt-in bulk-data channel behind `IIPCBridge` for high-throughput payloads.
+Install GTK 3 and WebKitGTK 4.1 using the distribution package manager. Verify:
 
----
-
-## Integrity Verification
-
-At startup, `IntegrityVerifier.VerifyApplicationBundle()` reads `lambdaflow.integrity.json` and computes SHA-256 for every listed file. The manifest itself is excluded from its own hash list. If any file is missing, added, or modified, the app refuses to start.
-
-The manifest is generated by `IntegrityManifestWriter.Write(appDir)` as the final step of `lambdaflow build`. It is deterministic and sorted by path.
-
-**Current limitation**: the manifest file itself is not signed. An attacker who can write to the application directory can replace both a file and its hash. The runtime check defends against accidental corruption and simple file swaps, but not against a targeted attacker with write access to the bundle.
-
-**Planned mitigation**: at build time, sign the manifest with an asymmetric key; embed the corresponding public key in the host binary as a compile-time constant. At startup, verify the manifest signature before reading any hash. This makes tampering detectable even when the attacker can modify the manifest, because the host public key cannot be changed without recompiling and re-signing the host. This should be combined with Authenticode signing of the host executable for full production hardening.
-
----
-
-## Security Model
-
-LambdaFlow is not a sandbox. The frontend, backend, and host are parts of one trusted application. These are the current protections and their scope:
-
-| Protection | What it covers | What it does not cover |
-|---|---|---|
-| Integrity manifest | Accidental corruption, simple file swaps | Targeted attacker with write access |
-| Named Pipe ACL | Other processes on the machine connecting to the pipe | The backend process itself (it is trusted) |
-| CSP + nosniff | Inline script injection, MIME sniffing | Logic bugs in frontend code |
-| `connect-src 'none'` | Frontend making arbitrary outbound network calls | Backend making network calls |
-| PAK virtual origin | Direct file:// access, path traversal | Content inside the PAK (trusted at build time) |
-| No shell execution | Shell injection via backend path | N/A — path is resolved from config, not user input |
-| DevTools behind DebugMode | Accidental exposure in production builds | Deliberate debug builds |
-
-**What must be added before production distribution:**
-
-1. Sign the integrity manifest with a private key; verify with a public key embedded in the host.
-2. Sign the Windows binaries with Authenticode (code signing certificate).
-3. Use an installer that places the app in a write-protected directory (e.g. `%ProgramFiles%`).
-4. Define and validate the message schema at the backend boundary — never trust the frontend message as safe input.
-5. Keep secrets out of `frontend.pak`; it is readable by anyone who can access the install directory.
-
----
-
-## Build System
-
-`lambdaflow build` performs these steps in order:
-
-1. Read `config.json` from the project directory.
-2. Run `platforms.windows.archs.x64.compileCommand` in the backend source folder.
-3. Copy the backend output (`compileDirectory`) to `Results/<name>-<version>/windows-x64/backend/`.
-4. `dotnet publish` the LambdaFlow Windows host (self-contained, `win-x64`) into the same directory.
-5. Copy `config.json` into the output directory.
-6. Create `frontend.pak` as a ZIP of the frontend folder.
-7. Run `IntegrityManifestWriter.Write()` — hash every output file, write `lambdaflow.integrity.json`.
-
-The result is a self-contained directory ready to run or package.
-
-The `compileCommand` is a shell string and can be any command the developer's toolchain supports:
-
-```json
-"compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin"
-"compileCommand": "mvn package -DskipTests"
-"compileCommand": "cargo build --release"
-"compileCommand": "pyinstaller main.py --onefile --distpath bin"
+```bash
+pkg-config --modversion gtk+-3.0
+pkg-config --modversion webkit2gtk-4.1
 ```
 
----
+### A C# backend says that .NET is missing
 
-## Project Scaffolding Internals
+The default C# backend template is framework-dependent. Install the .NET 8 runtime or change the backend compile command to `--self-contained true`.
 
-`lambdaflow new` now has an explicit language-template pipeline.
+### The backend exits immediately on Linux
 
-Command shape:
+Check that `platforms.linux.archs.<arch>.runCommand` matches the packaged filename and that it is executable.
 
-```powershell
-lambdaflow new <AppName> [directory] \
-  [--framework <LambdaFlowRepo>] \
-  [--language <csharp|java|python>] \
-  [--backend-compile-command "..."] \
-  [--backend-compile-directory "..."] \
-  [--self-contained]
-```
+### Protocol JSON appears in logs or logs break requests
 
-What happens internally:
+With StdIO, stdout is the protocol channel. Write logs to stderr.
 
-1. Resolve framework root (`--framework`, `LAMBDAFLOW_HOME`, or parent-folder discovery).
-2. Parse language template and choose defaults for compile + runtime backend settings.
-3. Copy `Examples/<Language>/backend` and `Examples/<Language>/frontend` into the new project.
-4. Exclude build artifacts while copying (`bin`, `obj`, `target`, `Results`, `__pycache__`).
-5. Copy the selected language SDK helper into `lambdaflow/Sdk/<Language>/` and patch backend references to use it.
-6. Generate `config.json` with:
-   - backend compile settings (`compileCommand`, `compileDirectory`)
-   - backend runtime launch settings (`runCommand`, `runArgs`)
-   - window/app defaults
-7. Generate `.vscode/tasks.json` and `.vscode/launch.json`.
-8. If `--self-contained` is present, copy framework source into the new project under `lambdaflow/`.
+### Integrity verification fails
 
-The VS Code extension uses this exact command path. Its New Project wizard simply collects user input (name, language, compile command, compile directory) and invokes `lambdaflow new` with those flags.
+Do not edit files inside `Results/` after build. Rebuild so the CLI regenerates the manifest.
 
----
+### Frontend requests time out
 
-## Cross-Platform Portability
+- Confirm the backend run command starts.
+- Confirm a handler is registered for the exact `kind`.
+- Check `lambdaflow.crash.log`.
+- In debug mode, inspect `lambdaflow.frontend.log`.
+- Make sure no backend logger writes to stdout under StdIO.
 
-The core design is portable. The platform-specific parts are isolated behind interfaces:
+### Windows build works but the app does not open
 
-```
-IWebView     — window creation, frontend loading, JS bridge
-IIPCBridge   — transport setup, send/receive loops
-IServices    — factory for the above, selected by platform at startup
-```
+Test on Windows, confirm WebView2 Runtime is installed, and inspect `lambdaflow.crash.log`. A successful Linux cross-build does not execute the Windows GUI stack.
 
-Adding a new platform means implementing these three interfaces. The core logic (`Config`, `IntegrityVerifier`, `BackendProcess`, the CLI) does not change.
+## Current scope
 
-Practical notes for future platforms:
+- Supported desktop hosts: Windows and Linux.
+- Supported host architectures: x64 and arm64.
+- macOS is represented in the shared platform model but does not yet have a host implementation.
+- Scaffolded backend languages: C#, Java, Python, and generic.
+- Scaffolded frontend types: basic HTML and React.
 
-- **Linux**: WebKitGTK for the view, Unix domain socket or named pipe for IPC. GTK requires a different UI thread model than WinForms.
-- **macOS**: WKWebView, `WKScriptMessageHandler` for the JS bridge, Unix domain socket for IPC. Must run on the main thread with `NSRunLoop`.
-- **Android**: Mobile sandboxing makes arbitrary child executables impractical. The backend story is different — likely an embedded runtime, a bound Android Service, or a restricted set of languages compiled to Android ABIs. The frontend layer (WebView) is available, but the IPC and backend models require a separate design.
+Contributions should preserve the line-delimited JSON protocol and keep frontend application code independent of the host implementation.
 
----
+## Security notice and disclaimer
 
-## Config Reference
+LambdaFlow executes the backend command defined by each application and renders frontend code supplied by that application. Only build or run projects, dependencies, and packaged bundles that you trust. Do not place credentials or private keys in frontend assets, configuration files, logs, or source control.
 
-`config.json` fields recognized by the host at runtime:
+The SHA-256 integrity manifest detects changes inside a built bundle, but it is not a digital signature and does not prove who published that bundle. Release distributors should additionally use the platform's code-signing mechanism, keep .NET, WebView2, GTK/WebKitGTK, Photino, backend runtimes, and application dependencies updated, and review their own IPC handlers and Content Security Policy requirements.
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `appName` | string | `"LambdaFlowApp"` | Application name |
-| `appVersion` | string | `"1.0.0"` | Version string |
-| `organizationName` | string | `"LambdaFlow"` | Organization name |
-| `appIcon` | string | `"app.ico"` | Icon file (relative to app dir) |
-| `frontendInitialHTML` | string | `"index.html"` | Entry point inside `frontend.pak` |
-| `securityMode` | string | `"Hardened"` | Only `"Hardened"` is supported |
-| `ipcTransport` | string | `"NamedPipe"` | `"NamedPipe"` or `"StdIO"` |
-| `window.title` | string | `"LambdaFlow app"` | Window title bar |
-| `window.width` | int | `800` | Initial width in pixels |
-| `window.height` | int | `600` | Initial height in pixels |
-| `window.minWidth` | int | `800` | Minimum width |
-| `window.minHeight` | int | `600` | Minimum height |
-| `window.maxWidth` | int | `0` | Maximum width (0 = unlimited) |
-| `window.maxHeight` | int | `0` | Maximum height (0 = unlimited) |
-| `platforms.windows.archs.x64.runCommand` | string | `"Backend.exe"` | Executable or command used to launch the backend inside `backend/` |
-| `platforms.windows.archs.x64.runArgs` | string[] | `[]` | Arguments passed to `runCommand` |
+To report a suspected vulnerability, follow [SECURITY.md](SECURITY.md) and avoid publishing exploitable details in a public issue.
 
-`config.json` fields used by the CLI at build time:
-
-| Field | Type | Default | Used by |
-|---|---|---|---|
-| `developmentBackendFolder` | string | `"backend"` | CLI (`lambdaflow build`) — working directory for backend compile command |
-| `developmentFrontendFolder` | string | `"frontend"` | CLI — source directory packed into `frontend.pak` |
-| `resultFolder` | string | `"Results"` | CLI — destination root for built artifacts |
-| `platforms.windows.archs.x64.compileCommand` | string | language-dependent | CLI — command executed to compile backend |
-| `platforms.windows.archs.x64.compileDirectory` | string | language-dependent | CLI — folder copied into final `backend/` output |
-
-Summary:
-
-- Host runtime uses app/window/security/ipc fields plus `runCommand` and `runArgs`.
-- CLI build uses folder/build fields plus compile settings.
-
----
-
-## Installer Direction
-
-The CLI builds an app directory. Packaging that directory into an installer is the next step. Practical options for Windows:
-
-| Option | Best for |
-|---|---|
-| MSIX | Modern signed packages, Microsoft Store distribution, enterprise MDM |
-| WiX Toolset | Traditional MSI installers, enterprise environments |
-| Self-extracting archive | Early development, simple distribution |
-
-The recommended path for production distribution is MSIX or WiX combined with Authenticode signing. Writing to `%ProgramFiles%` via an installer ensures normal users cannot modify application files after installation, which strengthens the integrity manifest guarantee.
+LambdaFlow is provided **as is**, without warranties or guarantees of security, availability, fitness for a particular purpose, or absence of defects. To the maximum extent permitted by applicable law, the authors and maintainers are not liable for claims, damages, data loss, security incidents, service interruption, or other liability arising from use, misuse, modification, or distribution of the software. Users and distributors are responsible for evaluating whether LambdaFlow is appropriate for their threat model and legal or regulatory requirements.

@@ -28,7 +28,7 @@
         "lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj",
         "--",
         "build",
-        "${workspaceFolder}",
+        "${workspaceFolder}/Examples/CSharp",
         "--framework",
         "${workspaceFolder}"
       ],
@@ -47,6 +47,19 @@
       "command": "dotnet",
       "type": "process",
       "args": [ "publish", "lambdaflow/Hosts/Windows/lambdaflow.windows.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true" ]
+    },
+    {
+      "label": "build Host.Linux",
+      "command": "dotnet",
+      "type": "process",
+      "args": [ "build", "lambdaflow/Hosts/Linux/lambdaflow.linux.csproj", "-c", "Debug" ],
+      "group": "build"
+    },
+    {
+      "label": "publish Host.Linux linux-x64",
+      "command": "dotnet",
+      "type": "process",
+      "args": [ "publish", "lambdaflow/Hosts/Linux/lambdaflow.linux.csproj", "-c", "Release", "-r", "linux-x64", "--self-contained", "true" ]
     }
   ],
   "inputs": [

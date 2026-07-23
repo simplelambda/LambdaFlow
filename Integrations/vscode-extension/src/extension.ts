@@ -144,15 +144,22 @@ async function cmdRunProject(forceDebug: boolean): Promise<void> {
     const frameworkPath = await requireFrameworkPath();
     if (!frameworkPath) return;
 
-    let cfg: { appName?: unknown; appVersion?: unknown };
+    let cfg: { appName?: unknown; appVersion?: unknown; resultFolder?: unknown };
     try   { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8')); }
     catch { vscode.window.showErrorMessage('LambdaFlow: Failed to parse config.json.'); return; }
 
+    const target = currentTarget();
+    if (!target) {
+        vscode.window.showErrorMessage(`LambdaFlow: ${process.platform}/${process.arch} is not a supported host.`);
+        return;
+    }
+
     const appName    = String(cfg.appName    ?? 'App');
     const appVersion = String(cfg.appVersion ?? '1.0.0');
+    const resultFolder = String(cfg.resultFolder ?? 'Results');
     const sanitized  = sanitizeFileName(appName);
-    const appDir     = path.join(projectDir, 'Results', `${sanitized}-${sanitizeFileName(appVersion)}`, 'windows-x64');
-    const exePath    = path.join(appDir, `${sanitized}.exe`);
+    const appDir     = path.join(projectDir, resultFolder, `${sanitized}-${sanitizeFileName(appVersion)}`, target.name);
+    const exePath    = path.join(appDir, `${sanitized}${target.extension}`);
 
     const cli       = cliProjectPath(frameworkPath);
     const debugArg  = forceDebug ? ' --debug' : '';
@@ -230,9 +237,11 @@ async function requireFrameworkPath(): Promise<string | undefined> {
 }
 
 async function downloadFramework(): Promise<string | undefined> {
-    const appData   = process.env['APPDATA'] ?? path.join(os.homedir(), 'AppData', 'Roaming');
+    const appData   = process.platform === 'win32'
+        ? (process.env['APPDATA'] ?? path.join(os.homedir(), 'AppData', 'Roaming'))
+        : (process.env['XDG_DATA_HOME'] ?? path.join(os.homedir(), '.local', 'share'));
     const targetDir = path.join(appData, 'LambdaFlow', 'framework');
-    const indicator = path.join(targetDir, 'lambdaflow', 'Hosts', 'Windows', 'lambdaflow.windows.csproj');
+    const indicator = cliProjectPath(targetDir);
 
     if (fs.existsSync(indicator)) {
         await vscode.workspace.getConfiguration('lambdaflow')
@@ -291,7 +300,7 @@ async function pickFrontendTemplate(): Promise<FrontendTemplate | undefined> {
     }));
 
     const selected = await vscode.window.showQuickPick(items, {
-        title:       'LambdaFlow â€” New Project',
+        title:       'LambdaFlow — New Project',
         placeHolder: 'Choose frontend type'
     });
 
@@ -313,7 +322,7 @@ async function pickDebugMode(): Promise<boolean | undefined> {
             }
         ],
         {
-            title:       'LambdaFlow â€” New Project',
+            title:       'LambdaFlow — New Project',
             placeHolder: 'Enable debug mode during development?'
         }
     );
@@ -322,9 +331,31 @@ async function pickDebugMode(): Promise<boolean | undefined> {
 }
 
 function sanitizeFileName(value: string): string {
-    return value.replace(/[<>:"/\\|?*]/g, '-');
+    let sanitized = value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[ .]+$/g, '');
+    if (!sanitized.trim()) sanitized = 'LambdaFlowApp';
+
+    const stem = sanitized.split('.', 1)[0].toUpperCase();
+    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem))
+        sanitized = `_${sanitized}`;
+
+    return sanitized;
 }
 
 function q(value: string): string {
     return `"${value}"`;
+}
+
+function currentTarget(): { name: string; extension: string } | null {
+    const arch = process.arch === 'x64'
+        ? 'x64'
+        : process.arch === 'arm64'
+            ? 'arm64'
+            : null;
+    if (!arch) return null;
+
+    if (process.platform === 'win32')
+        return { name: `windows-${arch}`, extension: '.exe' };
+    if (process.platform === 'linux')
+        return { name: `linux-${arch}`, extension: '' };
+    return null;
 }

@@ -52,13 +52,14 @@ internal static class Program
 
         Commands:
                     lambdaflow new <AppName> [directory] [--framework <LambdaFlowRepo>] [--language <csharp|java|python|other>] [--frontend <basic|react>] [--backend-compile-command <cmd>] [--backend-compile-directory <dir>] [--debug] [--self-contained]
-          lambdaflow build [projectDirectory] [--framework <LambdaFlowRepo>] [--debug]
+          lambdaflow build [projectDirectory] [--framework <LambdaFlowRepo>] [--target <windows-x64|windows-arm64|linux-x64|linux-arm64>] [--debug]
 
         Examples:
                     dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- new MyApp Apps/MyApp --framework . --language csharp
                     dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- new MyReactApp Apps/MyReactApp --framework . --language python --frontend react --debug
                     dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- new MyJavaApp Apps/MyJavaApp --framework . --language java --backend-compile-command "mvn -q -DskipTests package" --backend-compile-directory target
           dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- build Apps/MyApp --framework .
+          dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- build Apps/MyApp --framework . --target windows-x64
         """);
     }
 }
