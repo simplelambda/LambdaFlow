@@ -3,13 +3,16 @@ using System.IO;
 using System.Threading;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
 
 namespace lambdaflow.lambdaflow.Core{
     internal class BackendProcess : IDisposable{
         #region Variables
 
             private readonly Process _process;
+            private readonly ConcurrentQueue<string> _recentStdErr = new ConcurrentQueue<string>();
             private static readonly object LogLock = new object();
+            private const int MaxRecentStdErrLines = 20;
 
             internal event Func<string, Task>? OnStdOut;
             internal event Func<string, Task>? OnStdErr;
@@ -73,6 +76,49 @@ namespace lambdaflow.lambdaflow.Core{
                 return _process.StandardInput.WriteLineAsync(line.AsMemory(), ct);
             }
 
+            internal Task WaitForExitAsync(CancellationToken ct = default) {
+                return _process.WaitForExitAsync(ct);
+            }
+
+            internal async Task EnsureRunningAfterStartupAsync(
+                TimeSpan gracePeriod,
+                CancellationToken ct = default) {
+                if (HasExited)
+                    throw CreateUnexpectedExitException();
+
+                var exitTask  = _process.WaitForExitAsync(ct);
+                var graceTask = Task.Delay(gracePeriod, ct);
+
+                if (await Task.WhenAny(exitTask, graceTask).ConfigureAwait(false) == exitTask) {
+                    await exitTask.ConfigureAwait(false);
+                    throw CreateUnexpectedExitException();
+                }
+
+                await graceTask.ConfigureAwait(false);
+                if (HasExited)
+                    throw CreateUnexpectedExitException();
+            }
+
+            internal InvalidOperationException CreateUnexpectedExitException() {
+                try { _process.WaitForExit(); } catch { }
+
+                var exitCode = "unknown";
+                try {
+                    if (_process.HasExited)
+                        exitCode = _process.ExitCode.ToString();
+                }
+                catch { }
+
+                var stderr = string.Join(Environment.NewLine, _recentStdErr);
+                var details = string.IsNullOrWhiteSpace(stderr)
+                    ? "The backend produced no diagnostic output."
+                    : $"Backend error output:{Environment.NewLine}{stderr}";
+
+                return new InvalidOperationException(
+                    $"Backend process '{_process.StartInfo.FileName}' exited during startup " +
+                    $"with code {exitCode}.{Environment.NewLine}{details}");
+            }
+
             internal static ProcessStartInfo CreateDefaultStartInfo() {
                 var backendDir = Path.Combine(AppContext.BaseDirectory, "backend");
                 var arch       = Config.CurrentArch;
@@ -118,6 +164,10 @@ namespace lambdaflow.lambdaflow.Core{
 
             private void StdErrHandler(object sender, DataReceivedEventArgs e) {
                 if (e.Data is null) return;
+
+                _recentStdErr.Enqueue(e.Data);
+                while (_recentStdErr.Count > MaxRecentStdErrLines)
+                    _recentStdErr.TryDequeue(out _);
 
                 WriteBackendDebugLog(e.Data);
 

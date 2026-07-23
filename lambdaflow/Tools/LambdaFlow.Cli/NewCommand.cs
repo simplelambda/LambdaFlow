@@ -9,13 +9,17 @@ internal static class NewCommand
         CSharp,
         Java,
         Python,
+        Node,
+        Go,
         Other
     }
 
     private enum FrontendTemplate
     {
         Basic,
-        React
+        React,
+        Vue,
+        Svelte
     }
 
     private sealed record LanguageDefaults(
@@ -29,7 +33,7 @@ internal static class NewCommand
         var options = new CommandOptions(args);
         if (options.Positionals.Count == 0)
             throw new ArgumentException(
-                "Usage: lambdaflow new <AppName> [directory] [--framework <path>] [--language <csharp|java|python|other>] [--frontend <basic|react>] [--backend-compile-command <command>] [--backend-compile-directory <dir>] [--debug] [--self-contained]");
+                "Usage: lambdaflow new <AppName> [directory] [--framework <path>] [--language <csharp|java|python|node|go|other>] [--frontend <basic|react|vue|svelte>] [--backend-compile-command <command>] [--backend-compile-directory <dir>] [--debug] [--self-contained]");
 
         var appName       = options.Positionals[0];
         var projectDir    = Path.GetFullPath(options.Positionals.Count > 1 ? options.Positionals[1] : appName);
@@ -51,7 +55,7 @@ internal static class NewCommand
         var compileDirectoryOverride = options.Get("--backend-compile-directory");
         var hasCompileDirectoryOverride = !string.IsNullOrWhiteSpace(compileDirectoryOverride);
         var useTargetSpecificCompileDirectory =
-            language == ProjectLanguage.CSharp
+            (language is ProjectLanguage.CSharp or ProjectLanguage.Node or ProjectLanguage.Go)
             && string.IsNullOrWhiteSpace(compileCommandOverride)
             && !hasCompileDirectoryOverride;
         var compileDirectory = compileDirectoryOverride;
@@ -74,9 +78,9 @@ internal static class NewCommand
             frontend,
             debugEnabled);
         CreateBackend(projectDir, frameworkRoot, language);
-        CreateFrontend(projectDir, frameworkRoot, language, frontend);
+        CreateFrontend(projectDir, frameworkRoot, frontend);
 
-        if (language != ProjectLanguage.Other)
+        if (HasCanonicalBackendSdk(language))
             ProvisionLanguageSdk(projectDir, frameworkRoot, language);
 
         AdjustBackendForLanguage(projectDir, language);
@@ -87,6 +91,7 @@ internal static class NewCommand
         CreateVsCodeTasks(projectDir, frameworkRoot, selfContained);
         CreateVsCodeLaunch(projectDir, appName);
         CreateVsCodeSettings(projectDir);
+        CreateProjectGitIgnore(projectDir);
 
         Console.WriteLine($"LambdaFlow project created at: {projectDir}");
         Console.WriteLine($"Template language: {LanguageDisplayName(language)}");
@@ -103,8 +108,10 @@ internal static class NewCommand
             "csharp" or "c#" or "cs" => ProjectLanguage.CSharp,
             "java"                     => ProjectLanguage.Java,
             "python" or "py"          => ProjectLanguage.Python,
+            "node" or "nodejs" or "javascript" or "js" => ProjectLanguage.Node,
+            "go" or "golang"           => ProjectLanguage.Go,
             "other" or "otros"        => ProjectLanguage.Other,
-            _ => throw new ArgumentException("Unsupported language. Allowed values: C#, Java, Python, Other.")
+            _ => throw new ArgumentException("Unsupported language. Allowed values: C#, Java, Python, Node.js, Go, Other.")
         };
     }
 
@@ -114,7 +121,9 @@ internal static class NewCommand
         return raw.Trim().ToLowerInvariant() switch {
             "basic" or "html" or "other" or "otro" or "otros" => FrontendTemplate.Basic,
             "react" or "vite-react"                           => FrontendTemplate.React,
-            _ => throw new ArgumentException("Unsupported frontend. Allowed values: Basic, React.")
+            "vue" or "vite-vue"                               => FrontendTemplate.Vue,
+            "svelte" or "vite-svelte"                         => FrontendTemplate.Svelte,
+            _ => throw new ArgumentException("Unsupported frontend. Allowed values: Basic, React, Vue, Svelte.")
         };
     }
 
@@ -122,7 +131,7 @@ internal static class NewCommand
         return language switch {
             ProjectLanguage.CSharp => new LanguageDefaults(
                 ExampleFolderName: "CSharp",
-                CompileCommand: "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin/win-x64",
+                CompileCommand: "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained true -o bin/win-x64",
                 CompileDirectory: "bin",
                 RunCommand: "Backend.exe",
                 RunArgs: Array.Empty<string>()),
@@ -138,6 +147,18 @@ internal static class NewCommand
                 CompileDirectory: "bin",
                 RunCommand: "python",
                 RunArgs: new[] { "backend.py" }),
+            ProjectLanguage.Node => new LanguageDefaults(
+                ExampleFolderName: "Node",
+                CompileCommand: "node build.mjs win-x64",
+                CompileDirectory: "bin",
+                RunCommand: "node",
+                RunArgs: new[] { "backend.mjs" }),
+            ProjectLanguage.Go => new LanguageDefaults(
+                ExampleFolderName: "Go",
+                CompileCommand: "go run tools/build.go --target win-x64",
+                CompileDirectory: "bin",
+                RunCommand: "Backend.exe",
+                RunArgs: Array.Empty<string>()),
             ProjectLanguage.Other => new LanguageDefaults(
                 ExampleFolderName: "",
                 CompileCommand: "",
@@ -151,11 +172,13 @@ internal static class NewCommand
     private static string CompileCommandFor(ProjectLanguage language, string runtimeIdentifier) {
         return language switch {
             ProjectLanguage.CSharp =>
-                $"dotnet publish Backend.csproj -c Release -r {runtimeIdentifier} --self-contained false -o bin/{runtimeIdentifier}",
+                $"dotnet publish Backend.csproj -c Release -r {runtimeIdentifier} --self-contained true -o bin/{runtimeIdentifier}",
             ProjectLanguage.Java => "mvn -q -DskipTests package",
             ProjectLanguage.Python => runtimeIdentifier.StartsWith("linux-", StringComparison.Ordinal)
                 ? "python3 build.py"
                 : "python build.py",
+            ProjectLanguage.Node => $"node build.mjs {runtimeIdentifier}",
+            ProjectLanguage.Go => $"go run tools/build.go --target {runtimeIdentifier}",
             ProjectLanguage.Other => "",
             _ => throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported language template.")
         };
@@ -166,6 +189,8 @@ internal static class NewCommand
             ProjectLanguage.CSharp => platform == "windows" ? "Backend.exe" : "Backend",
             ProjectLanguage.Java => "java",
             ProjectLanguage.Python => platform == "windows" ? "python" : "python3",
+            ProjectLanguage.Node => "node",
+            ProjectLanguage.Go => platform == "windows" ? "Backend.exe" : "Backend",
             ProjectLanguage.Other => "your-backend-command",
             _ => throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported language template.")
         };
@@ -176,6 +201,8 @@ internal static class NewCommand
             ProjectLanguage.CSharp => "C#",
             ProjectLanguage.Java   => "Java",
             ProjectLanguage.Python => "Python",
+            ProjectLanguage.Node   => "Node.js",
+            ProjectLanguage.Go     => "Go",
             ProjectLanguage.Other  => "Other",
             _ => language.ToString()
         };
@@ -185,6 +212,8 @@ internal static class NewCommand
         return frontend switch {
             FrontendTemplate.Basic => "HTML basic",
             FrontendTemplate.React => "React",
+            FrontendTemplate.Vue => "Vue",
+            FrontendTemplate.Svelte => "Svelte",
             _ => frontend.ToString()
         };
     }
@@ -194,6 +223,8 @@ internal static class NewCommand
             ProjectLanguage.CSharp => "csharp",
             ProjectLanguage.Java   => "java",
             ProjectLanguage.Python => "python",
+            ProjectLanguage.Node   => "node",
+            ProjectLanguage.Go     => "go",
             ProjectLanguage.Other  => "other",
             _ => language.ToString().ToLowerInvariant()
         };
@@ -240,7 +271,8 @@ internal static class NewCommand
         ProjectLanguage  language,
         FrontendTemplate frontend,
         bool             debugEnabled) {
-        var isReact = frontend == FrontendTemplate.React;
+        var usesFrontendBuild = frontend != FrontendTemplate.Basic;
+        var frontendName = FrontendDisplayName(frontend);
         var config = new {
             appName,
             appVersion                = "1.0.0",
@@ -249,14 +281,14 @@ internal static class NewCommand
             securityMode              = "Hardened",
             ipcTransport              = "Auto",
             developmentBackendFolder  = "backend",
-            developmentFrontendFolder = isReact ? "frontend/dist" : "frontend",
+            developmentFrontendFolder = usesFrontendBuild ? "frontend/dist" : "frontend",
             resultFolder              = "Results",
             frontendInitialHTML       = "index.html",
             build = new {
-                preBuild = isReact
+                preBuild = usesFrontendBuild
                     ? new[] {
                         new {
-                            name             = "Install React dependencies",
+                            name             = $"Install {frontendName} dependencies",
                             command          = "npm install --no-audit --no-fund",
                             workingDirectory = "frontend",
                             enabled          = true,
@@ -264,7 +296,7 @@ internal static class NewCommand
                             timeoutSeconds   = (int?)null
                         },
                         new {
-                            name             = "Build React frontend",
+                            name             = $"Build {frontendName} frontend",
                             command          = "npm run build",
                             workingDirectory = "frontend",
                             enabled          = true,
@@ -363,15 +395,20 @@ internal static class NewCommand
     private static void CreateFrontend(
         string           projectDir,
         string           frameworkRoot,
-        ProjectLanguage  language,
         FrontendTemplate frontend) {
-        if (frontend == FrontendTemplate.React) {
-            CreateReactFrontend(projectDir, frameworkRoot);
-            return;
+        switch (frontend) {
+            case FrontendTemplate.React:
+                CreateReactFrontend(projectDir, frameworkRoot);
+                return;
+            case FrontendTemplate.Vue:
+                CreateVueFrontend(projectDir, frameworkRoot);
+                return;
+            case FrontendTemplate.Svelte:
+                CreateSvelteFrontend(projectDir, frameworkRoot);
+                return;
         }
 
-        var defaults          = GetLanguageDefaults(language == ProjectLanguage.Other ? ProjectLanguage.CSharp : language);
-        var sourceFrontendDir = Path.Combine(frameworkRoot, "Examples", defaults.ExampleFolderName, "frontend");
+        var sourceFrontendDir = Path.Combine(frameworkRoot, "Examples", "CSharp", "frontend");
         var targetFrontendDir = Path.Combine(projectDir, "frontend");
 
         CopyTemplateDirectory(sourceFrontendDir, targetFrontendDir);
@@ -412,18 +449,19 @@ internal static class NewCommand
 
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "package.json"), """
         {
+          "type": "module",
           "scripts": {
             "dev": "vite",
             "build": "vite build",
             "preview": "vite preview"
           },
           "dependencies": {
-            "react": "latest",
-            "react-dom": "latest"
+            "react": "19.2.8",
+            "react-dom": "19.2.8"
           },
           "devDependencies": {
-            "@vitejs/plugin-react": "latest",
-            "vite": "latest"
+            "@vitejs/plugin-react": "6.0.4",
+            "vite": "8.1.5"
           }
         }
         """);
@@ -445,7 +483,7 @@ internal static class NewCommand
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <title>LambdaFlow React App</title>
-            <script src="./lambdaflow.js"></script>
+            <script src="/lambdaflow.js"></script>
           </head>
           <body>
             <div id="root"></div>
@@ -468,7 +506,7 @@ internal static class NewCommand
         """);
 
         FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "App.jsx"), """
-        import { useMemo, useState } from 'react';
+        import { useEffect, useMemo, useState } from 'react';
         import { getHostStatus, pingBackend } from './services/lambdaflowApi.js';
         import HomePage from './pages/HomePage.jsx';
 
@@ -491,6 +529,10 @@ internal static class NewCommand
               setIsPinging(false);
             }
           }
+
+          useEffect(() => {
+            if (hostStatus.available) void handlePing();
+          }, [hostStatus.available]);
 
           return (
             <HomePage
@@ -759,6 +801,285 @@ internal static class NewCommand
         """);
     }
 
+    private static void CreateVueFrontend(string projectDir, string frameworkRoot) {
+        var frontendDir = Path.Combine(projectDir, "frontend");
+
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "package.json"), """
+        {
+          "type": "module",
+          "scripts": {
+            "dev": "vite",
+            "build": "vite build",
+            "preview": "vite preview"
+          },
+          "dependencies": {
+            "vue": "3.5.40"
+          },
+          "devDependencies": {
+            "@vitejs/plugin-vue": "6.0.8",
+            "vite": "8.1.5"
+          }
+        }
+        """);
+
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "vite.config.js"), """
+        import { defineConfig } from 'vite';
+        import vue from '@vitejs/plugin-vue';
+
+        export default defineConfig({
+          base: './',
+          plugins: [vue()]
+        });
+        """);
+
+        WriteViteIndex(frontendDir, "Vue", "/src/main.js");
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "main.js"), """
+        import { createApp } from 'vue';
+        import App from './App.vue';
+        import './styles.css';
+
+        createApp(App).mount('#app');
+        """);
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "App.vue"), """
+        <script setup>
+        import { onMounted, ref } from 'vue';
+        import { getHostStatus, pingBackend } from './services/lambdaflowApi.js';
+
+        const hostStatus = getHostStatus();
+        const result = ref('');
+        const isPinging = ref(false);
+
+        async function ping() {
+          isPinging.value = true;
+          result.value = '';
+          try {
+            const response = await pingBackend();
+            result.value = typeof response === 'string' ? response : JSON.stringify(response);
+          } catch (error) {
+            result.value = error instanceof Error ? error.message : String(error);
+          } finally {
+            isPinging.value = false;
+          }
+        }
+
+        onMounted(() => {
+          if (hostStatus.available) void ping();
+        });
+        </script>
+
+        <template>
+          <main class="shell">
+            <section class="panel">
+              <p class="eyebrow">LambdaFlow</p>
+              <h1>Vue frontend ready</h1>
+              <p class="lead">The generated application verifies the backend connection on startup.</p>
+              <div :class="['status', hostStatus.available ? 'ok' : 'warn']">
+                {{ hostStatus.message }}
+              </div>
+              <button type="button" :disabled="!hostStatus.available || isPinging" @click="ping">
+                {{ isPinging ? 'Pinging…' : 'Ping backend' }}
+              </button>
+              <pre v-if="result" class="result">{{ result }}</pre>
+            </section>
+          </main>
+        </template>
+        """);
+
+        WriteViteFrontendSharedFiles(frontendDir, frameworkRoot, "Vue");
+    }
+
+    private static void CreateSvelteFrontend(string projectDir, string frameworkRoot) {
+        var frontendDir = Path.Combine(projectDir, "frontend");
+
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "package.json"), """
+        {
+          "type": "module",
+          "scripts": {
+            "dev": "vite",
+            "build": "vite build",
+            "preview": "vite preview"
+          },
+          "dependencies": {
+            "svelte": "5.56.7"
+          },
+          "devDependencies": {
+            "@sveltejs/vite-plugin-svelte": "7.2.0",
+            "vite": "8.1.5"
+          }
+        }
+        """);
+
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "vite.config.js"), """
+        import { defineConfig } from 'vite';
+        import { svelte } from '@sveltejs/vite-plugin-svelte';
+
+        export default defineConfig({
+          base: './',
+          plugins: [svelte()]
+        });
+        """);
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "svelte.config.js"), """
+        export default {};
+        """);
+
+        WriteViteIndex(frontendDir, "Svelte", "/src/main.js");
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "main.js"), """
+        import { mount } from 'svelte';
+        import App from './App.svelte';
+        import './styles.css';
+
+        mount(App, { target: document.getElementById('app') });
+        """);
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "App.svelte"), """
+        <script>
+          import { onMount } from 'svelte';
+          import { getHostStatus, pingBackend } from './services/lambdaflowApi.js';
+
+          const hostStatus = getHostStatus();
+          let result = '';
+          let isPinging = false;
+
+          async function ping() {
+            isPinging = true;
+            result = '';
+            try {
+              const response = await pingBackend();
+              result = typeof response === 'string' ? response : JSON.stringify(response);
+            } catch (error) {
+              result = error instanceof Error ? error.message : String(error);
+            } finally {
+              isPinging = false;
+            }
+          }
+
+          onMount(() => {
+            if (hostStatus.available) void ping();
+          });
+        </script>
+
+        <main class="shell">
+          <section class="panel">
+            <p class="eyebrow">LambdaFlow</p>
+            <h1>Svelte frontend ready</h1>
+            <p class="lead">The generated application verifies the backend connection on startup.</p>
+            <div class:ok={hostStatus.available} class:warn={!hostStatus.available} class="status">
+              {hostStatus.message}
+            </div>
+            <button type="button" disabled={!hostStatus.available || isPinging} on:click={ping}>
+              {isPinging ? 'Pinging…' : 'Ping backend'}
+            </button>
+            {#if result}<pre class="result">{result}</pre>{/if}
+          </section>
+        </main>
+        """);
+
+        WriteViteFrontendSharedFiles(frontendDir, frameworkRoot, "Svelte");
+    }
+
+    private static void WriteViteIndex(string frontendDir, string name, string entrypoint) {
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "index.html"), $$"""
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>LambdaFlow {{name}} App</title>
+            <script src="/lambdaflow.js"></script>
+          </head>
+          <body>
+            <div id="app"></div>
+            <script type="module" src="{{entrypoint}}"></script>
+          </body>
+        </html>
+        """);
+    }
+
+    private static void WriteViteFrontendSharedFiles(
+        string frontendDir,
+        string frameworkRoot,
+        string frameworkName) {
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "services", "lambdaflowApi.js"), """
+        function sdk() {
+          if (!window.LambdaFlow)
+            throw new Error('LambdaFlow JavaScript SDK is not loaded.');
+          window.LambdaFlow.ensureAvailable();
+          return window.LambdaFlow;
+        }
+
+        export function getHostStatus() {
+          const available = Boolean(window.LambdaFlow && typeof window.send === 'function');
+          return {
+            available,
+            message: available
+              ? 'LambdaFlow host detected.'
+              : 'LambdaFlow host not detected. Run this frontend inside the packaged application.'
+          };
+        }
+
+        export function request(kind, payload = null, timeoutOrOptions = 30000) {
+          return sdk().request(kind, payload, timeoutOrOptions);
+        }
+
+        export function send(kind, payload = null, options) {
+          sdk().send(kind, payload, options);
+        }
+
+        export function on(kind, handler, options) {
+          return sdk().on(kind, handler, options);
+        }
+
+        export function handle(kind, handler, options) {
+          return sdk().handle(kind, handler, options);
+        }
+
+        export function pingBackend() {
+          return request('backend.ping', null, { timeoutMs: 5000 });
+        }
+        """);
+
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "src", "styles.css"), """
+        :root {
+          color: #17202a;
+          background: #f5f7fb;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        .shell { min-height: 100vh; display: grid; place-items: center; padding: 32px; }
+        .panel {
+          width: min(620px, 100%);
+          border: 1px solid #d8dee9;
+          border-radius: 8px;
+          background: white;
+          padding: 28px;
+          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+        }
+        .eyebrow { color: #1264a3; font-size: 12px; font-weight: 700; letter-spacing: .08em; margin: 0 0 8px; text-transform: uppercase; }
+        h1 { font-size: 34px; line-height: 1.1; margin: 0; }
+        .lead { color: #526070; line-height: 1.6; margin: 14px 0 22px; }
+        .status { border-radius: 6px; margin-bottom: 16px; padding: 10px 12px; }
+        .status.ok { background: #e8f5ee; color: #17633a; }
+        .status.warn { background: #fff4df; color: #7a4d00; }
+        button { border: 0; border-radius: 6px; background: #1264a3; color: white; cursor: pointer; font: inherit; padding: 10px 14px; }
+        button:disabled { cursor: default; opacity: .55; }
+        .result { background: #101820; border-radius: 6px; color: #f8fafc; margin: 16px 0 0; overflow: auto; padding: 12px; }
+        """);
+
+        CopyJavaScriptSdk(frameworkRoot, Path.Combine(frontendDir, "public", "lambdaflow.js"));
+        CopyJavaScriptSdkTypes(frameworkRoot, Path.Combine(frontendDir, "src", "services", "lambdaflow.d.ts"));
+        CopyJavaScriptSdkApi(frameworkRoot, Path.Combine(frontendDir, "src", "services", "lambdaflowApi.ts"));
+        FileSystemTools.WriteFile(Path.Combine(frontendDir, "README.md"), $$"""
+        # {{frameworkName}} frontend
+
+        LambdaFlow runs `npm install` and `npm run build` before packaging. The
+        generated app loads the canonical frontend SDK before the framework
+        entrypoint and automatically sends `backend.ping` when the host opens.
+
+        Use `src/services/lambdaflowApi.js` as the application-facing adapter.
+        The canonical TypeScript declarations and adapter are included beside it.
+        """);
+    }
+
     private static void CopyTemplateDirectory(string sourceDir, string targetDir) {
         if (!Directory.Exists(sourceDir))
             throw new DirectoryNotFoundException($"Template directory not found: '{sourceDir}'.");
@@ -809,6 +1130,10 @@ internal static class NewCommand
             || part.Equals(".pytest_cache", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool HasCanonicalBackendSdk(ProjectLanguage language) {
+        return language is ProjectLanguage.CSharp or ProjectLanguage.Java or ProjectLanguage.Python;
+    }
+
     private static void ProvisionLanguageSdk(string projectDir, string frameworkRoot, ProjectLanguage language) {
         var sdkSourcePath = SdkSourcePath(frameworkRoot, language);
         if (!File.Exists(sdkSourcePath))
@@ -847,6 +1172,8 @@ internal static class NewCommand
             case ProjectLanguage.Python:
                 AdjustPythonBackendSdkReference(projectDir);
                 break;
+            case ProjectLanguage.Node:
+            case ProjectLanguage.Go:
             case ProjectLanguage.Other:
                 break;
             default:
@@ -1031,6 +1358,30 @@ internal static class NewCommand
             "**/Results":     true
           }
         }
+        """);
+    }
+
+    private static void CreateProjectGitIgnore(string projectDir) {
+        FileSystemTools.WriteFile(Path.Combine(projectDir, ".gitignore"), """
+        # LambdaFlow packages and build output
+        Results/
+        bin/
+        obj/
+        target/
+        frontend/dist/
+
+        # Dependencies and caches
+        node_modules/
+        frontend/node_modules/
+        __pycache__/
+        *.py[cod]
+        .pytest_cache/
+        .gradle/
+
+        # Local diagnostics and editor state
+        *.log
+        .DS_Store
+        Thumbs.db
         """);
     }
 

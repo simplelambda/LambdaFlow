@@ -30,17 +30,20 @@ internal sealed class LinuxIPCBridge : IIPCBridge
         _initialized = true;
     }
 
-    public Task WaitUntilReadyAsync(CancellationToken ct = default) {
+    public async Task WaitUntilReadyAsync(CancellationToken ct = default) {
         if (!_initialized)
             throw new InvalidOperationException("LinuxIPCBridge is not initialized.");
-        return Task.CompletedTask;
+
+        await _backend!.EnsureRunningAfterStartupAsync(
+            TimeSpan.FromMilliseconds(300),
+            ct).ConfigureAwait(false);
     }
 
     public async Task SendMessageToBackend(string message) {
         if (!_initialized || _backend is null)
             throw new InvalidOperationException("LinuxIPCBridge is not initialized.");
         if (_backend.HasExited)
-            throw new InvalidOperationException("Backend already exited.");
+            throw _backend.CreateUnexpectedExitException();
         ArgumentNullException.ThrowIfNull(message);
 
         await _sendQueue.Writer.WriteAsync(message, _cts.Token).ConfigureAwait(false);

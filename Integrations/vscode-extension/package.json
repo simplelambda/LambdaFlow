@@ -1,9 +1,10 @@
 {
   "name": "lambdaflow",
   "displayName": "LambdaFlow",
-  "description": "Build desktop apps with a web frontend and any backend language.",
-  "version": "1.3.0",
+  "description": "Create, configure, build, run, and debug Windows and Linux desktop apps with web frontends and any backend language.",
+  "version": "1.3.1",
   "publisher": "simplelambda",
+  "private": true,
   "repository": {
     "type": "git",
     "url": "https://github.com/simplelambda/LambdaFlow.git",
@@ -18,7 +19,19 @@
     "webview",
     "cross-platform",
     "backend",
-    "lambdaflow"
+    "lambdaflow",
+    "webview2",
+    "webkitgtk",
+    "html",
+    "javascript",
+    "csharp",
+    "python",
+    "java",
+    "nodejs",
+    "go",
+    "react",
+    "vue",
+    "svelte"
   ],
   "engines": {
     "vscode": "^1.85.0"
@@ -26,8 +39,26 @@
   "categories": [
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#F2F4F8",
+    "theme": "dark"
+  },
+  "pricing": "Free",
   "icon": "icon.png",
   "main": "./out/extension",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "LambdaFlow projects can define backend and pre-build commands, so only trusted workspaces may be built or run."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "LambdaFlow requires local filesystem paths and native build tools."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -88,7 +119,7 @@
             "filenamePattern": "config.json"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
     "menus": {
@@ -130,6 +161,18 @@
           "default": "",
           "description": "Absolute path to the LambdaFlow framework source directory.",
           "scope": "machine"
+        },
+        "lambdaflow.dotnetPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the .NET SDK host executable. LambdaFlow also searches DOTNET_HOST_PATH, DOTNET_ROOT, PATH, standard install locations, and ~/.dotnet.",
+          "scope": "machine"
+        },
+        "lambdaflow.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to Node.js. Its directory is added to CLI task PATH so Node.js backends and React, Vue, or Svelte pre-build commands can find node, npm, and npx.",
+          "scope": "machine"
         }
       }
     }
@@ -138,7 +181,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "node ./node_modules/typescript/lib/tsc.js -p ./",
     "watch": "node ./node_modules/typescript/lib/tsc.js -watch -p ./",
-    "package": "npx vsce package --skip-license"
+    "package": "vsce package --skip-license"
   },
   "devDependencies": {
     "@types/node": "20.19.43",

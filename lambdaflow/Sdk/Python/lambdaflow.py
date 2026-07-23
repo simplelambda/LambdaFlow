@@ -85,7 +85,7 @@ __all__ = [
 
 DEFAULT_TIMEOUT_MS = 30_000
 DEFAULT_MAX_WORKERS = 16
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 VERSION = __version__
 RESULT_KIND_SUFFIX = ".result"
 

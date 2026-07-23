@@ -22,7 +22,7 @@
 (function (global) {
     'use strict';
 
-    var SDK_VERSION = '1.3.0';
+    var SDK_VERSION = '1.3.1';
     var DEFAULT_TIMEOUT_MS = 30000;
     var DEFAULT_REQUEST_RESULT_KIND_SUFFIX = '.result';
     var INBOUND_QUEUE_NAME = '__lambdaFlowInboundQueue';

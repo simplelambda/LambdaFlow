@@ -17,13 +17,13 @@
     "windows": {
       "archs": {
         "x64": {
-          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin/win-x64",
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained true -o bin/win-x64",
           "compileDirectory": "bin/win-x64",
           "runCommand": "Backend.exe",
           "runArgs": []
         },
         "arm64": {
-          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-arm64 --self-contained false -o bin/win-arm64",
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-arm64 --self-contained true -o bin/win-arm64",
           "compileDirectory": "bin/win-arm64",
           "runCommand": "Backend.exe",
           "runArgs": []
@@ -33,13 +33,13 @@
     "linux": {
       "archs": {
         "x64": {
-          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-x64 --self-contained false -o bin/linux-x64",
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-x64 --self-contained true -o bin/linux-x64",
           "compileDirectory": "bin/linux-x64",
           "runCommand": "Backend",
           "runArgs": []
         },
         "arm64": {
-          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-arm64 --self-contained false -o bin/linux-arm64",
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-arm64 --self-contained true -o bin/linux-arm64",
           "compileDirectory": "bin/linux-arm64",
           "runCommand": "Backend",
           "runArgs": []

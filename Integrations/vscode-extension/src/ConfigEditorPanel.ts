@@ -106,10 +106,20 @@ export class LambdaFlowConfigEditorProvider implements vscode.CustomTextEditorPr
                 try {
                     const text = JSON.stringify(msg.config, null, 2) + '\n';
                     const edit = new vscode.WorkspaceEdit();
-                    edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), text);
-                    await vscode.workspace.applyEdit(edit);
-                    await document.save();
+                    const fullRange = new vscode.Range(
+                        document.positionAt(0),
+                        document.positionAt(document.getText().length)
+                    );
+                    edit.replace(document.uri, fullRange, text);
+                    if (!await vscode.workspace.applyEdit(edit))
+                        throw new Error('VS Code rejected the configuration edit.');
+                    if (!await document.save())
+                        throw new Error('VS Code could not save config.json.');
                     vscode.window.showInformationMessage('LambdaFlow: Configuration saved.');
+                } catch (err) {
+                    vscode.window.showErrorMessage(
+                        `LambdaFlow: Failed to save configuration — ${err instanceof Error ? err.message : String(err)}`
+                    );
                 } finally {
                     ignoreNextChange = false;
                 }
@@ -538,7 +548,7 @@ function buildHtml(config: LambdaFlowConfig): string {
 
 <script nonce="${nonce}">
   const vscode   = acquireVsCodeApi();
-  const original = ${JSON.stringify(config)};
+  const original = ${jsonForScript(config)};
 
   document.getElementById('btnViewJson').addEventListener('click', () => {
     vscode.postMessage({ type: 'openAsJson' });
@@ -597,6 +607,7 @@ function buildHtml(config: LambdaFlowConfig): string {
       platforms: {
         ...original.platforms,
         windows: {
+          ...(original.platforms?.windows ?? {}),
           archs: {
             ...(original.platforms?.windows?.archs ?? {}),
             x64: {
@@ -609,6 +620,7 @@ function buildHtml(config: LambdaFlowConfig): string {
           }
         },
         linux: {
+          ...(original.platforms?.linux ?? {}),
           archs: {
             ...(original.platforms?.linux?.archs ?? {}),
             x64: {
@@ -680,13 +692,16 @@ function buildHtml(config: LambdaFlowConfig): string {
   function renderPreBuildList(items) {
     const list = document.getElementById('preBuildList');
     list.innerHTML = '';
-    (items && items.length ? items : []).forEach(item => appendPreBuildCommand(item));
+    (items && items.length ? items : []).forEach((item, index) => appendPreBuildCommand(item, index));
   }
 
-  function appendPreBuildCommand(item) {
+  function appendPreBuildCommand(item, sourceIndex) {
     const list = document.getElementById('preBuildList');
     const row = document.createElement('div');
     row.className = 'prebuild-item';
+    if (Number.isInteger(sourceIndex)) {
+      row.dataset.sourceIndex = String(sourceIndex);
+    }
     row.innerHTML = [
       '<div class="prebuild-row">',
       '  <div class="field">',
@@ -719,13 +734,21 @@ function buildHtml(config: LambdaFlowConfig): string {
 
   function collectPreBuild() {
     return Array.from(document.querySelectorAll('.prebuild-item'))
-      .map(row => ({
-        name: row.querySelector('[data-field="name"]').value,
-        command: row.querySelector('[data-field="command"]').value,
-        workingDirectory: row.querySelector('[data-field="workingDirectory"]').value,
-        enabled: row.querySelector('[data-field="enabled"]').checked,
-        continueOnError: row.querySelector('[data-field="continueOnError"]').checked
-      }))
+      .map(row => {
+        const sourceIndex = Number.parseInt(row.dataset.sourceIndex ?? '', 10);
+        const source = Number.isInteger(sourceIndex)
+          ? (original.build?.preBuild?.[sourceIndex] ?? {})
+          : {};
+
+        return {
+          ...source,
+          name: row.querySelector('[data-field="name"]').value,
+          command: row.querySelector('[data-field="command"]').value,
+          workingDirectory: row.querySelector('[data-field="workingDirectory"]').value,
+          enabled: row.querySelector('[data-field="enabled"]').checked,
+          continueOnError: row.querySelector('[data-field="continueOnError"]').checked
+        };
+      })
       .filter(item => item.command.trim() !== '' || item.workingDirectory.trim() !== '');
   }
 </script>
@@ -747,8 +770,8 @@ function normalizePreBuild(build: BuildConfig | undefined): PreBuildCommandConfi
 }
 
 function renderPreBuildItems(items: PreBuildCommandConfig[]): string {
-    return items.map(item => /* html */`
-      <div class="prebuild-item">
+    return items.map((item, index) => /* html */`
+      <div class="prebuild-item" data-source-index="${index}">
         <div class="prebuild-row">
           <div class="field">
             <label>Name</label>
@@ -788,4 +811,13 @@ function e(value: unknown): string {
         .replace(/"/g, '&quot;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+}
+
+function jsonForScript(value: unknown): string {
+    return JSON.stringify(value)
+        .replace(/&/g, '\\u0026')
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
 }

@@ -13,7 +13,7 @@ using System.Text.Json.Serialization;
 /// </summary>
 public static class LambdaFlow
 {
-    public const string Version = "1.3.0";
+    public const string Version = "1.3.1";
 
     private const string ResultSuffix = ".result";
 

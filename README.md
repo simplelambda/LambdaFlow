@@ -2,7 +2,7 @@
 
 Build native desktop applications with a web frontend and the backend language you choose.
 
-Current stable release: **1.3.0**.
+Current stable release: **1.3.1**.
 
 LambdaFlow packages HTML, CSS, and JavaScript into a native desktop window, starts an arbitrary backend executable, and routes JSON messages between them. The backend can be C#, Python, Java, Rust, Go, C++, or any other process that can read and write line-delimited JSON.
 
@@ -16,6 +16,7 @@ LambdaFlow packages HTML, CSS, and JavaScript into a native desktop window, star
 
 - [How LambdaFlow works](#how-lambdaflow-works)
 - [Features](#features)
+- [Release 1.3.1](#release-131)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Build targets](#build-targets)
@@ -48,10 +49,10 @@ LambdaFlow packages HTML, CSS, and JavaScript into a native desktop window, star
 └──────────────────────────────────┬───────────────────────────────────┘
                                    │ JSON envelopes
                                    ▼
-                   ┌───────────────────────────────┐
-                   │ Backend process               │
-                   │ C# · Java · Python · anything │
-                   └───────────────────────────────┘
+                  ┌─────────────────────────────────┐
+                  │ Backend process                 │
+                  │ C# · Java · Python · Node · Go  │
+                  └─────────────────────────────────┘
 ```
 
 The user launches the packaged host. The host verifies the SHA-256 integrity manifest, opens the native window, starts the configured backend, and forwards messages in both directions. LambdaFlow does not embed an HTTP server and does not force the backend to use JavaScript.
@@ -64,11 +65,23 @@ The user launches the packaged host. The host verifies the SHA-256 integrity man
 - Aligned C#, Java, and Python backend SDKs.
 - Request/response, fire-and-forget events, error envelopes, and typed entity payloads.
 - `config.json` for application, window, build, runtime, debug, platform, and architecture settings.
-- C#, Java, Python, and generic project templates.
-- Basic HTML and Vite + React frontend templates.
+- C#, Java, Python, Node.js, Go, and generic project templates.
+- Basic HTML and Vite-based React, Vue, and Svelte frontend templates.
 - Cross-compilation of Windows artifacts from Linux with the .NET SDK.
 - VS Code project creation, configuration editor, build, run, and debug commands.
 - SHA-256 bundle verification and a restricted local frontend origin.
+
+## Release 1.3.1
+
+Version 1.3.1 is a backward-compatible patch over 1.3.0. It fixes generated C#
+applications opening with a disconnected frontend when the backend cannot find a
+global .NET runtime. Generated C# backends are now self-contained, and both hosts
+report an early backend exit with its code and recent stderr.
+
+This release also adds Node.js and Go backend starters, Vue and Svelte frontend
+templates, automatic Vite-template connectivity checks, and safer framework
+discovery and cloning in the VS Code extension. The wire protocol, configuration
+format, and public SDK API remain compatible with 1.3.0.
 
 ## Requirements
 
@@ -77,12 +90,16 @@ The user launches the packaged host. The host verifies the SHA-256 integrity man
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Git
 - The compiler or runtime required by the selected backend:
-  - C#: .NET 8 SDK/runtime
+  - C#: .NET 8 SDK (the generated backend is published self-contained)
   - Java: JDK 17+ and Maven
   - Python: Python 3.10+
-  - React template: Node.js and npm
+  - Node.js backend: Node.js
+  - Go backend: Go toolchain
+  - React, Vue, and Svelte templates: Node.js and npm
 
-The LambdaFlow host is published self-contained. A backend may still require its own runtime unless its compile command produces a self-contained executable.
+The LambdaFlow host and generated C# backend are published self-contained. Java,
+Python, and Node.js projects still require their selected runtime on the target
+machine; Go produces a native executable.
 
 ### Windows runtime
 
@@ -130,14 +147,20 @@ Supported backend templates:
 - `csharp`
 - `java`
 - `python`
+- `node`
+- `go`
 - `other`
 
 Supported frontend templates:
 
 - `basic`
 - `react`
+- `vue`
+- `svelte`
 
-Add `--self-contained` to copy the framework sources required by the generated project into that project.
+Every generated Vite frontend sends `backend.ping` when it opens, making transport
+or backend startup failures immediately visible. Add `--self-contained` to copy
+the framework sources required by the generated project into that project.
 
 ### 2. Build for the current operating system
 
@@ -230,7 +253,9 @@ Results/MyApp-1.0.0/linux-x64/
 └── host runtime files
 ```
 
-The project generator copies only the selected backend SDK. The frontend always receives `lambdaflow.js`.
+The generator copies the canonical backend SDK for C#, Java, or Python. Node.js
+and Go receive dependency-free protocol starters, while `other` receives an
+editable generic skeleton. Every frontend receives `lambdaflow.js`.
 
 ## Configuration
 
@@ -272,7 +297,7 @@ The project generator copies only the selected backend SDK. The frontend always 
     "windows": {
       "archs": {
         "x64": {
-          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained false -o bin/win-x64",
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r win-x64 --self-contained true -o bin/win-x64",
           "compileDirectory": "bin/win-x64",
           "runCommand": "Backend.exe",
           "runArgs": []
@@ -282,7 +307,7 @@ The project generator copies only the selected backend SDK. The frontend always 
     "linux": {
       "archs": {
         "x64": {
-          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-x64 --self-contained false -o bin/linux-x64",
+          "compileCommand": "dotnet publish Backend.csproj -c Release -r linux-x64 --self-contained true -o bin/linux-x64",
           "compileDirectory": "bin/linux-x64",
           "runCommand": "Backend",
           "runArgs": []
@@ -553,6 +578,27 @@ Commands:
 
 It works on Windows and Linux. Build and run select the current OS/architecture, locate the correct output folder, and launch `.exe` only on Windows.
 
+CLI tasks use direct process execution instead of shell command strings, so they
+work with Bash, Fish, PowerShell and other configured terminals. The extension
+looks for the .NET SDK through `DOTNET_HOST_PATH`, `DOTNET_ROOT`, `PATH`, standard
+installation directories and `~/.dotnet`. Use `LambdaFlow: Dotnet Path` when the
+SDK executable is installed elsewhere. A missing SDK is reported before a task is
+started instead of surfacing as shell exit code 127.
+
+For React, Vue, Svelte, and Node.js projects, it also locates Node.js in `NODE`, `PATH`, standard locations,
+`~/.local/share/node` and `~/.local/node`. The .NET and Node directories are added
+to the CLI task environment so nested `dotnet`, `npm` and `npx` commands resolve.
+Use `LambdaFlow: Node Path` for a custom installation.
+
+The project may live anywhere; it does not need to be inside the LambdaFlow
+repository. If no valid framework source is configured, the extension can clone
+the public repository to its recommended application-data location, clone it
+under a parent folder chosen by the user, or select an existing checkout. Cloning
+uses a temporary sibling directory and never deletes a pre-existing invalid
+target. An embedded CLI inside a self-contained application project is sufficient
+to build that project, but it is not mistaken for the complete template
+repository when creating another project.
+
 The configuration editor supports:
 
 - App metadata and icon
@@ -661,7 +707,9 @@ Integrations/
 
 Examples/
 ├── CSharp/
+├── Go/
 ├── Java/
+├── Node/
 └── Python/
 ```
 
@@ -706,7 +754,10 @@ pkg-config --modversion webkit2gtk-4.1
 
 ### A C# backend says that .NET is missing
 
-The default C# backend template is framework-dependent. Install the .NET 8 runtime or change the backend compile command to `--self-contained true`.
+Projects generated by LambdaFlow 1.3.1 publish C# backends self-contained. For a
+project generated by an older version, change each C# compile command to
+`--self-contained true` and rebuild. The SDK is still required on the development
+machine, but the packaged backend no longer depends on a global runtime.
 
 ### The backend exits immediately on Linux
 
@@ -723,6 +774,8 @@ Do not edit files inside `Results/` after build. Rebuild so the CLI regenerates 
 ### Frontend requests time out
 
 - Confirm the backend run command starts.
+- Read the host startup error: LambdaFlow now includes the backend exit code and
+  recent stderr when the process terminates during startup.
 - Confirm a handler is registered for the exact `kind`.
 - Check `lambdaflow.crash.log`.
 - In debug mode, inspect `lambdaflow.frontend.log`.
@@ -737,8 +790,8 @@ Test on Windows, confirm WebView2 Runtime is installed, and inspect `lambdaflow.
 - Supported desktop hosts: Windows and Linux.
 - Supported host architectures: x64 and arm64.
 - macOS is represented in the shared platform model but does not yet have a host implementation.
-- Scaffolded backend languages: C#, Java, Python, and generic.
-- Scaffolded frontend types: basic HTML and React.
+- Scaffolded backend languages: C#, Java, Python, Node.js, Go, and generic.
+- Scaffolded frontend types: basic HTML, React, Vue, and Svelte.
 
 Contributions should preserve the line-delimited JSON protocol and keep frontend application code independent of the host implementation.
 

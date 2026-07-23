@@ -49,7 +49,7 @@ Generated/derived folders are not source:
 - `**/node_modules/`
 - `Integrations/vscode-extension/out/` is compiled from `src/`; update it by running the TypeScript build.
 
-Release `1.3.0` is declared in the four framework `.csproj` files, the extension
+Release `1.3.1` is declared in the four framework `.csproj` files, the extension
 `package.json`, and each canonical SDK version constant. Keep those values
 aligned for framework releases; example application `appVersion` values remain
 independent.
@@ -285,8 +285,8 @@ Create:
 dotnet run --project lambdaflow/Tools/LambdaFlow.Cli -- \
   new <AppName> [directory] \
   --framework <repo> \
-  --language <csharp|java|python|other> \
-  --frontend <basic|react> \
+  --language <csharp|java|python|node|go|other> \
+  --frontend <basic|react|vue|svelte> \
   [--debug] [--self-contained]
 ```
 
@@ -316,6 +316,17 @@ Build order:
 10. Generate integrity manifest last.
 
 Never include `Results`, `bin`, `obj`, `target`, caches, or `node_modules` when scaffolding source.
+
+Template-specific rules:
+
+- Generated C# backends publish with `--self-contained true`; do not reintroduce
+  a target-machine .NET runtime dependency.
+- Node.js and Go templates are dependency-free protocol starters rather than
+  canonical full backend SDKs.
+- React, Vue, and Svelte use Vite, load the canonical `lambdaflow.js` before the
+  framework entrypoint, and issue `backend.ping` on startup.
+- Generated projects include a `.gitignore` for packages, compiler output,
+  dependencies, and caches.
 
 ## Host-specific constraints
 
@@ -360,6 +371,13 @@ Source: `Integrations/vscode-extension/src/`.
 The extension must:
 
 - Work with Linux and Windows filesystem paths.
+- Allow application projects to live outside the framework repository.
+- Treat an embedded self-contained CLI as valid for build/run, but require the
+  complete SDK/example template tree for project creation.
+- Offer the recommended clone location, a user-selected clone parent, or an
+  existing valid checkout when the framework is missing.
+- Clone through a temporary sibling and never delete a pre-existing invalid
+  destination.
 - Use the CLI rather than duplicating build logic.
 - Find results via configured `resultFolder`, app name/version, and current target.
 - Add `.exe` only on Windows.
@@ -408,6 +426,12 @@ mvn -q -f Examples/Java/backend/pom.xml -DskipTests package
 
 # Frontend SDK
 node --check lambdaflow/Sdk/JavaScript/lambdaflow.js
+
+# Additional protocol starters
+printf '%s\n' '{"kind":"backend.ping","id":"smoke-node"}' \
+  | node Examples/Node/backend/backend.mjs
+printf '%s\n' '{"kind":"backend.ping","id":"smoke-go"}' \
+  | go run Examples/Go/backend/backend.go
 
 # Extension
 cd Integrations/vscode-extension

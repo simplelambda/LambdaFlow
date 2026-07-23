@@ -65,14 +65,27 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                 if (!_initialized)
                     throw new InvalidOperationException("IPCBridge not inicialized.");
 
-                if (Config.IpcTransport != IPCTransport.NamedPipe)
+                if (Config.IpcTransport != IPCTransport.NamedPipe) {
+                    await _backend.EnsureRunningAfterStartupAsync(
+                        TimeSpan.FromMilliseconds(300),
+                        ct).ConfigureAwait(false);
                     return;
+                }
 
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 using var linked  = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
 
                 try {
-                    await _pipeWriterSource.Task.WaitAsync(linked.Token).ConfigureAwait(false);
+                    var pipeTask = _pipeWriterSource.Task.WaitAsync(linked.Token);
+                    var exitTask = _backend.WaitForExitAsync(linked.Token);
+                    var completed = await Task.WhenAny(pipeTask, exitTask).ConfigureAwait(false);
+
+                    if (completed == exitTask) {
+                        await exitTask.ConfigureAwait(false);
+                        throw _backend.CreateUnexpectedExitException();
+                    }
+
+                    await pipeTask.ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested) {
                     throw new TimeoutException("Backend did not connect to the LambdaFlow named pipe within 10 seconds.");

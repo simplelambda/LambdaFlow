@@ -1,0 +1,5 @@
+{
+  "name": "lambdaflow-node-backend",
+  "private": true,
+  "type": "module"
+}

@@ -5,13 +5,19 @@ import * as os     from 'os';
 import * as cp     from 'child_process';
 import { LambdaFlowConfigEditorProvider } from './ConfigEditorPanel';
 import { SidebarProvider }               from './SidebarProvider';
-import { resolveFrameworkPath, cliProjectPath } from './utils';
+import {
+    resolveFrameworkPath,
+    resolveDotnetPath,
+    resolveNodePath,
+    cliProjectPath,
+    isFrameworkSourceRoot
+} from './utils';
 
 const REPO_URL = 'https://github.com/simplelambda/LambdaFlow.git';
 
 interface LanguageTemplate {
     label:    string;
-    cliValue: 'csharp' | 'java' | 'python' | 'other';
+    cliValue: 'csharp' | 'java' | 'python' | 'node' | 'go' | 'other';
     detail:   string;
 }
 
@@ -21,7 +27,7 @@ interface LanguageTemplatePickItem extends vscode.QuickPickItem {
 
 interface FrontendTemplate {
     label:    string;
-    cliValue: 'basic' | 'react';
+    cliValue: 'basic' | 'react' | 'vue' | 'svelte';
     detail:   string;
 }
 
@@ -33,12 +39,16 @@ const LANGUAGE_TEMPLATES: LanguageTemplate[] = [
     { label: 'C#',     cliValue: 'csharp',  detail: '.NET / C# backend'  },
     { label: 'Java',   cliValue: 'java',    detail: 'Maven / Java backend' },
     { label: 'Python', cliValue: 'python',  detail: 'Python backend'      },
+    { label: 'Node.js', cliValue: 'node',   detail: 'Dependency-free JavaScript backend starter' },
+    { label: 'Go',      cliValue: 'go',     detail: 'Cross-compiled native Go backend starter' },
     { label: 'Other',  cliValue: 'other',   detail: 'Generic backend command configured manually' }
 ];
 
 const FRONTEND_TEMPLATES: FrontendTemplate[] = [
     { label: 'HTML basic', cliValue: 'basic', detail: 'Plain HTML/CSS/JS frontend' },
-    { label: 'React',      cliValue: 'react', detail: 'Vite React frontend with npm pre-build' }
+    { label: 'React',      cliValue: 'react', detail: 'Vite + React frontend with backend connectivity check' },
+    { label: 'Vue',        cliValue: 'vue',   detail: 'Vite + Vue frontend with backend connectivity check' },
+    { label: 'Svelte',     cliValue: 'svelte', detail: 'Vite + Svelte frontend with backend connectivity check' }
 ];
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -60,8 +70,10 @@ export function deactivate(): void {}
 // ---------------------------------------------------------------------------
 
 async function cmdNewProject(): Promise<void> {
-    const frameworkPath = await requireFrameworkPath();
+    const frameworkPath = await requireFrameworkPath(true);
     if (!frameworkPath) return;
+    const dotnetPath = await requireDotnetPath();
+    if (!dotnetPath) return;
 
     const appName = await vscode.window.showInputBox({
         title:         'LambdaFlow — New Project',
@@ -74,7 +86,7 @@ async function cmdNewProject(): Promise<void> {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const defaultDir    = workspaceRoot
         ? path.join(workspaceRoot, 'Apps', appName)
-        : appName;
+        : path.join(os.homedir(), appName);
 
     const targetDir = await vscode.window.showInputBox({
         title: 'LambdaFlow — New Project',
@@ -89,15 +101,29 @@ async function cmdNewProject(): Promise<void> {
     const frontend = await pickFrontendTemplate();
     if (!frontend) return;
 
-    const cli      = cliProjectPath(frameworkPath);
-    const terminal = vscode.window.createTerminal({ name: 'LambdaFlow' });
-    terminal.show();
-    terminal.sendText(
-        `dotnet run --project ${q(cli)} -- new ${q(appName)} ${q(targetDir)} --framework ${q(frameworkPath)} --language ${q(template.cliValue)} --frontend ${q(frontend.cliValue)} --self-contained`
+    const cli = cliProjectPath(frameworkPath);
+    const succeeded = await runCliTask(
+        'LambdaFlow: create project',
+        dotnetPath,
+        cli,
+        [
+            'new',
+            appName,
+            targetDir,
+            '--framework',
+            frameworkPath,
+            '--language',
+            template.cliValue,
+            '--frontend',
+            frontend.cliValue,
+            '--self-contained'
+        ],
+        frameworkPath
     );
+    if (!succeeded) return;
 
     const action = await vscode.window.showInformationMessage(
-        `Creating "${appName}" (${template.label}, ${frontend.label}) at ${targetDir}. Open when the terminal finishes.`,
+        `LambdaFlow: "${appName}" (${template.label}, ${frontend.label}) was created at ${targetDir}.`,
         'Open Folder'
     );
     if (action === 'Open Folder') {
@@ -119,13 +145,18 @@ async function cmdBuildProject(): Promise<void> {
 
     const frameworkPath = await requireFrameworkPath();
     if (!frameworkPath) return;
+    const dotnetPath = await requireDotnetPath();
+    if (!dotnetPath) return;
 
-    const cli      = cliProjectPath(frameworkPath);
-    const terminal = vscode.window.createTerminal({ name: 'LambdaFlow Build' });
-    terminal.show();
-    terminal.sendText(
-        `dotnet run --project "${cli}" -- build "${projectDir}" --framework "${frameworkPath}"`
+    const succeeded = await runCliTask(
+        'LambdaFlow: build app',
+        dotnetPath,
+        cliProjectPath(frameworkPath),
+        ['build', projectDir, '--framework', frameworkPath],
+        projectDir
     );
+    if (succeeded)
+        vscode.window.showInformationMessage('LambdaFlow: Build completed.');
 }
 
 async function cmdRunProject(forceDebug: boolean): Promise<void> {
@@ -143,6 +174,8 @@ async function cmdRunProject(forceDebug: boolean): Promise<void> {
 
     const frameworkPath = await requireFrameworkPath();
     if (!frameworkPath) return;
+    const dotnetPath = await requireDotnetPath();
+    if (!dotnetPath) return;
 
     let cfg: { appName?: unknown; appVersion?: unknown; resultFolder?: unknown };
     try   { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8')); }
@@ -161,42 +194,40 @@ async function cmdRunProject(forceDebug: boolean): Promise<void> {
     const appDir     = path.join(projectDir, resultFolder, `${sanitized}-${sanitizeFileName(appVersion)}`, target.name);
     const exePath    = path.join(appDir, `${sanitized}${target.extension}`);
 
-    const cli       = cliProjectPath(frameworkPath);
-    const debugArg  = forceDebug ? ' --debug' : '';
-    const buildTask = new vscode.Task(
-        { type: 'shell', task: 'LambdaFlow: build' },
-        vscode.workspace.workspaceFolders![0],
+    const buildArgs = ['build', projectDir, '--framework', frameworkPath];
+    if (forceDebug) buildArgs.push('--debug');
+
+    const succeeded = await runCliTask(
         forceDebug ? 'LambdaFlow: build debug app' : 'LambdaFlow: build app',
-        'LambdaFlow',
-        new vscode.ShellExecution(
-            `dotnet run --project "${cli}" -- build "${projectDir}" --framework "${frameworkPath}"${debugArg}`
-        )
+        dotnetPath,
+        cliProjectPath(frameworkPath),
+        buildArgs,
+        projectDir
     );
-
-    const execution = await vscode.tasks.executeTask(buildTask);
-
-    try {
-        await new Promise<void>((resolve, reject) => {
-            const disposable = vscode.tasks.onDidEndTaskProcess(e => {
-                if (e.execution === execution) {
-                    disposable.dispose();
-                    if (e.exitCode === 0) resolve();
-                    else reject(new Error(`Build failed (exit code ${e.exitCode ?? '?'})`));
-                }
-            });
-        });
-    } catch (err) {
-        vscode.window.showErrorMessage(`LambdaFlow: ${err instanceof Error ? err.message : String(err)}`);
-        return;
-    }
+    if (!succeeded) return;
 
     if (!fs.existsSync(exePath)) {
         vscode.window.showErrorMessage(`LambdaFlow: Executable not found at ${exePath}`);
         return;
     }
 
-    cp.spawn(exePath, [], { detached: true, stdio: 'ignore', cwd: appDir }).unref();
-    vscode.window.showInformationMessage(`LambdaFlow: ${appName} started${forceDebug ? ' in debug mode' : ''}.`);
+    try {
+        const app = cp.spawn(exePath, [], {
+            detached: true,
+            stdio: 'ignore',
+            cwd: appDir,
+            env: cliEnvironment(dotnetPath)
+        });
+        await waitForStableSpawn(app);
+        app.unref();
+        vscode.window.showInformationMessage(
+            `LambdaFlow: ${appName} started${forceDebug ? ' in debug mode' : ''}.`
+        );
+    } catch (err) {
+        vscode.window.showErrorMessage(
+            `LambdaFlow: Failed to start ${appName} — ${err instanceof Error ? err.message : String(err)}`
+        );
+    }
 }
 
 async function cmdOpenConfig(): Promise<void> {
@@ -221,29 +252,213 @@ async function cmdOpenConfig(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 
-async function requireFrameworkPath(): Promise<string | undefined> {
-    const resolved = resolveFrameworkPath();
+async function requireFrameworkPath(requireProjectTemplates = false): Promise<string | undefined> {
+    const resolved = resolveFrameworkPath(requireProjectTemplates);
     if (resolved) return resolved;
 
     const action = await vscode.window.showInformationMessage(
-        'LambdaFlow: framework not found. Download it automatically?',
-        'Download',
-        'Set Path Manually'
+        'LambdaFlow: framework source not found. Download the public repository or select an existing copy.',
+        'Download Framework',
+        'Select Existing',
+        'Open Settings'
     );
-    if (action === 'Download')        return downloadFramework();
-    if (action === 'Set Path Manually')
-        vscode.commands.executeCommand('workbench.action.openSettings', 'lambdaflow.frameworkPath');
+    if (action === 'Download Framework') return chooseFrameworkDownloadLocation();
+    if (action === 'Select Existing') return selectExistingFramework();
+    if (action === 'Open Settings')
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'lambdaflow.frameworkPath');
     return undefined;
 }
 
-async function downloadFramework(): Promise<string | undefined> {
+async function requireDotnetPath(): Promise<string | undefined> {
+    const resolved = resolveDotnetPath();
+    if (resolved) return resolved;
+
+    const action = await vscode.window.showErrorMessage(
+        'LambdaFlow: .NET 8 SDK was not found. Install it or set an absolute path in LambdaFlow: Dotnet Path.',
+        'Installation Guide',
+        'Set Path Manually'
+    );
+
+    if (action === 'Installation Guide')
+        await vscode.env.openExternal(vscode.Uri.parse('https://dotnet.microsoft.com/download/dotnet/8.0'));
+    if (action === 'Set Path Manually')
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'lambdaflow.dotnetPath');
+
+    return undefined;
+}
+
+async function runCliTask(
+    name: string,
+    dotnetPath: string,
+    cliPath: string,
+    cliArgs: string[],
+    cwd: string
+): Promise<boolean> {
+    const scope = vscode.workspace.workspaceFolders?.[0] ?? vscode.TaskScope.Global;
+    const task = new vscode.Task(
+        { type: 'lambdaflow', task: name },
+        scope,
+        name,
+        'LambdaFlow',
+        new vscode.ProcessExecution(
+            dotnetPath,
+            ['run', '--project', cliPath, '--', ...cliArgs],
+            {
+                cwd,
+                env: cliEnvironment(dotnetPath)
+            }
+        )
+    );
+    task.presentationOptions = {
+        reveal: vscode.TaskRevealKind.Always,
+        panel: vscode.TaskPanelKind.Shared,
+        clear: true
+    };
+
+    try {
+        const execution = await vscode.tasks.executeTask(task);
+        const exitCode = await new Promise<number | undefined>(resolve => {
+            const disposable = vscode.tasks.onDidEndTaskProcess(event => {
+                if (event.execution !== execution) return;
+                disposable.dispose();
+                resolve(event.exitCode);
+            });
+        });
+
+        if (exitCode === 0) return true;
+
+        vscode.window.showErrorMessage(
+            `LambdaFlow: ${name} failed (exit code ${exitCode ?? 'unknown'}).`
+        );
+        return false;
+    } catch (err) {
+        vscode.window.showErrorMessage(
+            `LambdaFlow: ${name} could not start — ${err instanceof Error ? err.message : String(err)}`
+        );
+        return false;
+    }
+}
+
+function cliEnvironment(dotnetPath: string): Record<string, string> {
+    const nodePath = resolveNodePath();
+    const executableDirectories = [
+        path.dirname(dotnetPath),
+        nodePath ? path.dirname(nodePath) : undefined
+    ].filter((directory): directory is string => Boolean(directory));
+    const pathKey = Object.keys(process.env)
+        .find(key => key.toLowerCase() === 'path') ?? 'PATH';
+    const inheritedPath = process.env[pathKey] ?? '';
+
+    return {
+        ...Object.fromEntries(
+            Object.entries(process.env).filter((entry): entry is [string, string] =>
+                typeof entry[1] === 'string'
+            )
+        ),
+        [pathKey]: [...executableDirectories, inheritedPath].filter(Boolean).join(path.delimiter)
+    };
+}
+
+function waitForStableSpawn(child: cp.ChildProcess, stabilityMs = 750): Promise<void> {
+    return new Promise((resolve, reject) => {
+        let timer: NodeJS.Timeout | undefined;
+        const cleanup = () => {
+            if (timer) clearTimeout(timer);
+            child.off('spawn', onSpawn);
+            child.off('error', onError);
+            child.off('exit', onExit);
+        };
+        const onSpawn = () => {
+            timer = setTimeout(() => {
+                cleanup();
+                resolve();
+            }, stabilityMs);
+        };
+        const onError = (error: Error) => {
+            cleanup();
+            reject(error);
+        };
+        const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+            cleanup();
+            reject(new Error(
+                `application exited during startup (${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}); check lambdaflow.crash.log`
+            ));
+        };
+
+        child.once('spawn', onSpawn);
+        child.once('error', onError);
+        child.once('exit', onExit);
+    });
+}
+
+function recommendedFrameworkPath(): string {
     const appData   = process.platform === 'win32'
         ? (process.env['APPDATA'] ?? path.join(os.homedir(), 'AppData', 'Roaming'))
         : (process.env['XDG_DATA_HOME'] ?? path.join(os.homedir(), '.local', 'share'));
-    const targetDir = path.join(appData, 'LambdaFlow', 'framework');
-    const indicator = cliProjectPath(targetDir);
+    return path.join(appData, 'LambdaFlow', 'framework');
+}
 
-    if (fs.existsSync(indicator)) {
+async function chooseFrameworkDownloadLocation(): Promise<string | undefined> {
+    const recommended = recommendedFrameworkPath();
+    const choice = await vscode.window.showQuickPick(
+        [
+            {
+                label: 'Recommended location',
+                description: recommended,
+                target: recommended
+            },
+            {
+                label: 'Choose parent folder…',
+                description: 'Clone into a LambdaFlow subfolder',
+                target: null
+            }
+        ],
+        {
+            title: 'LambdaFlow — Framework Location',
+            placeHolder: 'Choose where the public repository should be cloned'
+        }
+    );
+    if (!choice) return undefined;
+    if (choice.target) return downloadFramework(choice.target);
+
+    const selected = await vscode.window.showOpenDialog({
+        title: 'Choose the parent folder for the LambdaFlow repository',
+        defaultUri: vscode.Uri.file(path.dirname(recommended)),
+        openLabel: 'Clone Here',
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false
+    });
+    if (!selected?.[0]) return undefined;
+
+    return downloadFramework(path.join(selected[0].fsPath, 'LambdaFlow'));
+}
+
+async function selectExistingFramework(): Promise<string | undefined> {
+    const selected = await vscode.window.showOpenDialog({
+        title: 'Select an existing LambdaFlow repository',
+        openLabel: 'Use Framework',
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false
+    });
+    if (!selected?.[0]) return undefined;
+
+    const targetDir = selected[0].fsPath;
+    if (!isFrameworkSourceRoot(targetDir, true)) {
+        vscode.window.showErrorMessage(
+            `LambdaFlow: ${targetDir} is not a complete framework repository. Select the cloned repository root containing the CLI, SDKs, and Examples folders.`
+        );
+        return undefined;
+    }
+
+    await vscode.workspace.getConfiguration('lambdaflow')
+        .update('frameworkPath', targetDir, vscode.ConfigurationTarget.Global);
+    return targetDir;
+}
+
+async function downloadFramework(targetDir: string): Promise<string | undefined> {
+    if (isFrameworkSourceRoot(targetDir, true)) {
         await vscode.workspace.getConfiguration('lambdaflow')
             .update('frameworkPath', targetDir, vscode.ConfigurationTarget.Global);
         return targetDir;
@@ -254,14 +469,41 @@ async function downloadFramework(): Promise<string | undefined> {
         async () => {
             try {
                 fs.mkdirSync(path.dirname(targetDir), { recursive: true });
-                if (fs.existsSync(targetDir))
-                    fs.rmSync(targetDir, { recursive: true, force: true });
+                if (fs.existsSync(targetDir)) {
+                    vscode.window.showErrorMessage(
+                        `LambdaFlow: ${targetDir} already exists but is not a valid framework repository. Choose another location or select a valid existing copy.`
+                    );
+                    return undefined;
+                }
 
-                await new Promise<void>((resolve, reject) => {
-                    const child = cp.spawn('git', ['clone', '--depth=1', REPO_URL, targetDir], { stdio: 'pipe' });
-                    child.on('close', code => (code === 0 ? resolve() : reject(new Error(`git clone exited ${code}`))));
-                    child.on('error', reject);
-                });
+                const temporaryDir = `${targetDir}.download-${process.pid}-${Date.now()}`;
+                try {
+                    await new Promise<void>((resolve, reject) => {
+                        const child = cp.spawn(
+                            'git',
+                            ['clone', '--depth=1', REPO_URL, temporaryDir],
+                            { stdio: ['ignore', 'ignore', 'pipe'] }
+                        );
+                        let stderr = '';
+                        child.stderr?.on('data', chunk => {
+                            stderr += String(chunk);
+                            if (stderr.length > 4000) stderr = stderr.slice(-4000);
+                        });
+                        child.on('close', code => code === 0
+                            ? resolve()
+                            : reject(new Error(stderr.trim() || `git clone exited ${code}`)));
+                        child.on('error', reject);
+                    });
+
+                    if (!isFrameworkSourceRoot(temporaryDir, true))
+                        throw new Error('Downloaded repository does not contain the LambdaFlow CLI, SDKs, and project templates.');
+
+                    fs.renameSync(temporaryDir, targetDir);
+                } catch (err) {
+                    if (fs.existsSync(temporaryDir))
+                        fs.rmSync(temporaryDir, { recursive: true, force: true });
+                    throw err;
+                }
 
                 await vscode.workspace.getConfiguration('lambdaflow')
                     .update('frameworkPath', targetDir, vscode.ConfigurationTarget.Global);
@@ -307,29 +549,6 @@ async function pickFrontendTemplate(): Promise<FrontendTemplate | undefined> {
     return selected?.template;
 }
 
-async function pickDebugMode(): Promise<boolean | undefined> {
-    const selected = await vscode.window.showQuickPick(
-        [
-            {
-                label: 'No',
-                description: 'Normal mode',
-                value: false
-            },
-            {
-                label: 'Yes',
-                description: 'Enable DevTools, console capture, and backend debug logs',
-                value: true
-            }
-        ],
-        {
-            title:       'LambdaFlow — New Project',
-            placeHolder: 'Enable debug mode during development?'
-        }
-    );
-
-    return selected?.value;
-}
-
 function sanitizeFileName(value: string): string {
     let sanitized = value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[ .]+$/g, '');
     if (!sanitized.trim()) sanitized = 'LambdaFlowApp';
@@ -339,10 +558,6 @@ function sanitizeFileName(value: string): string {
         sanitized = `_${sanitized}`;
 
     return sanitized;
-}
-
-function q(value: string): string {
-    return `"${value}"`;
 }
 
 function currentTarget(): { name: string; extension: string } | null {
