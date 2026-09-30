@@ -117,8 +117,8 @@ internal sealed class LinuxWebView : IWebView, IDisposable
         var window = new PhotinoWindow()
             .SetTitle(Config.Window.Title ?? Config.AppName)
             .SetUseOsDefaultSize(false)
-            .SetSize(Config.Window.Width, Config.Window.Height)
-            .SetMinSize(Config.Window.MinWidth, Config.Window.MinHeight)
+            .SetSize(Config.WindowWidth, Config.WindowHeight)
+            .SetMinSize(Config.WindowMinWidth, Config.WindowMinHeight)
             .SetContextMenuEnabled(Config.DebugMode)
             .SetDevToolsEnabled(Config.DebugMode)
             .Center()
@@ -131,12 +131,12 @@ internal sealed class LinuxWebView : IWebView, IDisposable
                 return false;
             });
 
-        if (Config.Window.MaxWidth > 0 && Config.Window.MaxHeight > 0)
-            window.SetMaxSize(Config.Window.MaxWidth, Config.Window.MaxHeight);
+        if (Config.WindowMaxWidth > 0 && Config.WindowMaxHeight > 0)
+            window.SetMaxSize(Config.WindowMaxWidth, Config.WindowMaxHeight);
 
-        if (string.Equals(Config.Window.Mode, "maximized", StringComparison.OrdinalIgnoreCase))
+        if (Config.WindowMode == WindowMode.Maximized)
             window.SetMaximized(true);
-        else if (string.Equals(Config.Window.Mode, "fullscreen", StringComparison.OrdinalIgnoreCase))
+        else if (Config.WindowMode == WindowMode.Fullscreen)
             window.SetFullScreen(true);
 
         var iconPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, Config.AppIcon));
@@ -207,7 +207,7 @@ internal sealed class LinuxWebView : IWebView, IDisposable
                 function forward(level, args) {
                   try {
                     window.send(JSON.stringify({
-                      kind: '__console',
+                      kind: '__LAMBD_FLOW_CONSOLE_KIND__',
                       payload: {
                         level: level,
                         message: Array.prototype.slice.call(args).map(serialize).join(' '),
@@ -232,7 +232,7 @@ internal sealed class LinuxWebView : IWebView, IDisposable
                 });
               })();
               </script>
-              """
+              """.Replace("__LAMBD_FLOW_CONSOLE_KIND__", ReservedMessageKinds.Console, StringComparison.Ordinal)
             : "";
         var bootstrap = $$"""
         <meta http-equiv="Content-Security-Policy" content="{{Config.FrontendContentSecurityPolicy}}">
@@ -244,7 +244,7 @@ internal sealed class LinuxWebView : IWebView, IDisposable
             window.__lambdaFlowInboundQueue.push(message);
           };
           window.external.receiveMessage(function (message) { window.receive(message); });
-          window.external.sendMessage(JSON.stringify({ kind: '__lambdaflow_ready' }));
+          window.external.sendMessage(JSON.stringify({ kind: '{{ReservedMessageKinds.Ready}}' }));
         })();
         </script>
         {{consoleCapture}}
@@ -288,27 +288,27 @@ internal sealed class LinuxWebView : IWebView, IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("kind", out var kind))
                 return false;
-            if (kind.GetString() == "__lambdaflow_ready") {
+            if (kind.GetString() == ReservedMessageKinds.Ready) {
                 _frontendReady = true;
                 FlushPendingFrontendMessages();
                 return true;
             }
-            if (kind.GetString() == "__lambdaflow_window") {
+            if (kind.GetString() == ReservedMessageKinds.Window) {
                 if (root.TryGetProperty("payload", out var windowPayload)
                     && windowPayload.ValueKind == JsonValueKind.Object
                     && windowPayload.TryGetProperty("width", out var widthValue)
                     && windowPayload.TryGetProperty("height", out var heightValue)
                     && widthValue.TryGetInt32(out var width)
                     && heightValue.TryGetInt32(out var height)) {
-                    ModifySize(Math.Clamp(width, 320, 8192), Math.Clamp(height, 240, 8192));
+                    ModifySize(WindowLimits.ClampWidth(width), WindowLimits.ClampHeight(height));
                 }
                 return true;
             }
-            if (kind.GetString() == "__lambdaflow_close") {
+            if (kind.GetString() == ReservedMessageKinds.Close) {
                 _window?.Close();
                 return true;
             }
-            if (kind.GetString() != "__console")
+            if (kind.GetString() != ReservedMessageKinds.Console)
                 return false;
             if (!Config.Debug.Enabled || !Config.Debug.CaptureFrontendConsole)
                 return true;

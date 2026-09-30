@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: dotnet build lambdaflow/Core/lambdaflow.core..csproj -c Release
+      - run: dotnet build lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj -c Release
+      - run: dotnet build lambdaflow/Hosts/Linux/lambdaflow.linux.csproj -c Release
+      - run: python -m py_compile lambdaflow/Sdk/Python/lambdaflow.py
+      - run: node --check lambdaflow/Sdk/JavaScript/lambdaflow.js
+      - run: dotnet run --project lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj -c Release --no-build -- --help
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet build lambdaflow/Core/lambdaflow.core..csproj -c Release
+      - run: dotnet build lambdaflow/Tools/LambdaFlow.Cli/LambdaFlow.Cli.csproj -c Release
+      - run: dotnet build lambdaflow/Hosts/Windows/lambdaflow.windows.csproj -c Release

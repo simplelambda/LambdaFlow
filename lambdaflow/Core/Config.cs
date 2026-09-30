@@ -108,6 +108,12 @@ namespace lambdaflow.lambdaflow.Core
         internal static string AppVersion => App.AppVersion;
         internal static string OrgName => App.OrganizationName;
         internal static WindowConfig Window => App.Window ?? new WindowConfig();
+        internal static int WindowWidth => WindowLimits.ClampWidth(Window.Width);
+        internal static int WindowHeight => WindowLimits.ClampHeight(Window.Height);
+        internal static int WindowMinWidth => WindowLimits.ClampWidth(Window.MinWidth);
+        internal static int WindowMinHeight => WindowLimits.ClampHeight(Window.MinHeight);
+        internal static int WindowMaxWidth => WindowLimits.ClampOptionalWidth(Window.MaxWidth);
+        internal static int WindowMaxHeight => WindowLimits.ClampOptionalHeight(Window.MaxHeight);
         internal static string FrontendInitialHTML => App.FrontendInitialHTML;
         internal static string AppIcon => App.AppIcon;
         internal static ArchConfig CurrentArch => GetCurrentArch();
@@ -124,6 +130,7 @@ namespace lambdaflow.lambdaflow.Core
 
         internal static readonly SecurityMode SecurityMode = ParseSecurityMode(App.SecurityMode);
         internal static readonly IPCTransport IpcTransport = ParseIpcTransport(App.IpcTransport);
+        internal static readonly WindowMode WindowMode = ParseWindowMode(App.Window?.Mode);
 
         private static AppConfig LoadAppConfig() {
             var configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
@@ -160,6 +167,16 @@ namespace lambdaflow.lambdaflow.Core
                     : IPCTransport.StdIO,
                 "stdio"     => IPCTransport.StdIO,
                 _           => throw new InvalidOperationException($"Unsupported IPC transport '{value}'.")
+            };
+        }
+
+        private static WindowMode ParseWindowMode(string? value) {
+            value ??= "normal";
+            return value.ToLowerInvariant() switch {
+                "normal"     => WindowMode.Normal,
+                "maximized"  => WindowMode.Maximized,
+                "fullscreen" => WindowMode.Fullscreen,
+                _            => throw new InvalidOperationException($"Unsupported window mode '{value}'. Expected normal, maximized, or fullscreen.")
             };
         }
 

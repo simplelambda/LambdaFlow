@@ -26,4 +26,11 @@ namespace lambdaflow.lambdaflow.Core
         StdIO,
         NamedPipe
     }
+
+    internal enum WindowMode
+    {
+        Normal,
+        Maximized,
+        Fullscreen
+    }
 }

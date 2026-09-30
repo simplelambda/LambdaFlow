@@ -632,11 +632,14 @@ LambdaFlow solo admite actualmente `securityMode: "Hardened"`.
 - El frontend se sirve desde un origen local privado, no desde URLs arbitrarias del sistema de archivos.
 - Se rechaza el path traversal fuera de `frontend.pak`.
 - El frontend recibe una Content Security Policy restrictiva.
+- La política predeterminada solo permite imágenes y fuentes del origen empaquetado o URLs `data:` y mantiene `connect-src 'none'`; el acceso de red corresponde al backend salvo que una futura configuración lo autorice explícitamente.
 - `security.allowUnsafeEval` vale `false` por defecto. Actívalo solo en aplicaciones
   que evalúen deliberadamente código frontend dinámico de confianza.
 - Windows desactiva host objects, menús contextuales, atajos del navegador, barra de estado y DevTools salvo que debug los permita.
 - Linux desactiva menús contextuales y DevTools salvo que debug los permita.
 - Los named pipes de Windows son privados para el usuario actual.
+
+`window.mode` solo admite `normal`, `maximized` o `fullscreen`; un typo explícito hace fallar la carga de configuración. Los tamaños iniciales y los mensajes `__lambdaflow_window` usan los mismos límites nativos (mínimo 320×240, máximo 8192×8192).
 
 El manifiesto detecta modificaciones accidentales o posteriores al build; no es una firma del publicador. Un atacante capaz de sustituir los archivos y el manifiesto puede recalcular los hashes. Para autenticidad de una release hay que añadir firma de código de la plataforma.
 

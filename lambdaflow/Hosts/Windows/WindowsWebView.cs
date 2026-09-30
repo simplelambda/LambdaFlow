@@ -162,22 +162,22 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             private void CreateForm(IIPCBridge ipcBridge) {
                 _host = new Form {
                     Text          = Config.Window.Title ?? "LambdaFlow app",
-                    WindowState   = string.Equals(Config.Window.Mode, "maximized", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(Config.Window.Mode, "fullscreen", StringComparison.OrdinalIgnoreCase)
+                    WindowState   = Config.WindowMode == WindowMode.Maximized
+                        || Config.WindowMode == WindowMode.Fullscreen
                         ? FormWindowState.Maximized
                         : FormWindowState.Normal,
-                    FormBorderStyle = string.Equals(Config.Window.Mode, "fullscreen", StringComparison.OrdinalIgnoreCase)
+                    FormBorderStyle = Config.WindowMode == WindowMode.Fullscreen
                         ? FormBorderStyle.None
                         : FormBorderStyle.Sizable,
                     StartPosition = FormStartPosition.CenterScreen,
-                    Width         = Config.Window.Width,
-                    Height        = Config.Window.Height,
-                    MinimumSize   = new Size(Config.Window.MinWidth, Config.Window.MinHeight),
+                    Width         = Config.WindowWidth,
+                    Height        = Config.WindowHeight,
+                    MinimumSize   = new Size(Config.WindowMinWidth, Config.WindowMinHeight),
                     KeyPreview    = true
                 };
 
-                if (Config.Window.MaxWidth > 0 && Config.Window.MaxHeight > 0)
-                    _host.MaximumSize = new Size(Config.Window.MaxWidth, Config.Window.MaxHeight);
+                if (Config.WindowMaxWidth > 0 && Config.WindowMaxHeight > 0)
+                    _host.MaximumSize = new Size(Config.WindowMaxWidth, Config.WindowMaxHeight);
 
                 _host.FormClosed += (_, _) => {
                     _pak?.Dispose();
@@ -285,9 +285,9 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                         };
 
                         window.chrome.webview.postMessage(JSON.stringify({
-                            kind: '__lambdaflow_ready'
+                            kind: '__LAMBD_FLOW_READY_KIND__'
                         }));
-                    ");
+                    ".Replace("__LAMBD_FLOW_READY_KIND__", ReservedMessageKinds.Ready, StringComparison.Ordinal));
 
                 if (Config.Debug.Enabled && Config.Debug.CaptureFrontendConsole) {
                     await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
@@ -305,7 +305,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                             function sendLog(level, args) {
                                 try {
                                     window.chrome.webview.postMessage(JSON.stringify({
-                                        kind: '__console',
+                                        kind: '__LAMBD_FLOW_CONSOLE_KIND__',
                                         payload: {
                                             level: level,
                                             message: Array.prototype.slice.call(args).map(serialize).join(' '),
@@ -335,7 +335,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                                 sendLog('error', ['Unhandled promise rejection:', event.reason]);
                             });
                         })();
-                    ");
+                    ".Replace("__LAMBD_FLOW_CONSOLE_KIND__", ReservedMessageKinds.Console, StringComparison.Ordinal));
                 }
             }
 
@@ -353,23 +353,23 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
                     if (!root.TryGetProperty("kind", out var kind))
                         return false;
-                    if (kind.GetString() == "__lambdaflow_ready") {
+                    if (kind.GetString() == ReservedMessageKinds.Ready) {
                         _frontendReady = true;
                         FlushPendingFrontendMessages();
                         return true;
                     }
-                    if (kind.GetString() == "__lambdaflow_window") {
+                    if (kind.GetString() == ReservedMessageKinds.Window) {
                         if (root.TryGetProperty("payload", out var windowPayload)
                             && windowPayload.ValueKind == JsonValueKind.Object
                             && windowPayload.TryGetProperty("width", out var widthValue)
                             && windowPayload.TryGetProperty("height", out var heightValue)
                             && widthValue.TryGetInt32(out var width)
                             && heightValue.TryGetInt32(out var height)) {
-                            ModifySize(Math.Clamp(width, 320, 8192), Math.Clamp(height, 240, 8192));
+                            ModifySize(WindowLimits.ClampWidth(width), WindowLimits.ClampHeight(height));
                         }
                         return true;
                     }
-                    if (kind.GetString() == "__lambdaflow_close") {
+                    if (kind.GetString() == ReservedMessageKinds.Close) {
                         if (_host is not null) {
                             if (_host.InvokeRequired)
                                 _host.BeginInvoke(new Action(_host.Close));
@@ -378,7 +378,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                         }
                         return true;
                     }
-                    if (kind.GetString() != "__console")
+                    if (kind.GetString() != ReservedMessageKinds.Console)
                         return false;
 
                     if (!Config.Debug.Enabled || !Config.Debug.CaptureFrontendConsole)
