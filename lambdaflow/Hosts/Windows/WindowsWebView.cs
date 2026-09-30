@@ -21,7 +21,6 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
 
             private const string AppHost = "app.lambdaflow.localhost";
             private const string AppOrigin = "https://" + AppHost;
-            private const string FrontendContentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; base-uri 'self'; frame-ancestors 'none'";
             private static readonly object FrontendLogLock = new object();
 
             private WebView2? _view;
@@ -163,7 +162,13 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             private void CreateForm(IIPCBridge ipcBridge) {
                 _host = new Form {
                     Text          = Config.Window.Title ?? "LambdaFlow app",
-                    WindowState   = FormWindowState.Maximized,
+                    WindowState   = string.Equals(Config.Window.Mode, "maximized", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(Config.Window.Mode, "fullscreen", StringComparison.OrdinalIgnoreCase)
+                        ? FormWindowState.Maximized
+                        : FormWindowState.Normal,
+                    FormBorderStyle = string.Equals(Config.Window.Mode, "fullscreen", StringComparison.OrdinalIgnoreCase)
+                        ? FormBorderStyle.None
+                        : FormBorderStyle.Sizable,
                     StartPosition = FormStartPosition.CenterScreen,
                     Width         = Config.Window.Width,
                     Height        = Config.Window.Height,
@@ -353,6 +358,26 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
                         FlushPendingFrontendMessages();
                         return true;
                     }
+                    if (kind.GetString() == "__lambdaflow_window") {
+                        if (root.TryGetProperty("payload", out var windowPayload)
+                            && windowPayload.ValueKind == JsonValueKind.Object
+                            && windowPayload.TryGetProperty("width", out var widthValue)
+                            && windowPayload.TryGetProperty("height", out var heightValue)
+                            && widthValue.TryGetInt32(out var width)
+                            && heightValue.TryGetInt32(out var height)) {
+                            ModifySize(Math.Clamp(width, 320, 8192), Math.Clamp(height, 240, 8192));
+                        }
+                        return true;
+                    }
+                    if (kind.GetString() == "__lambdaflow_close") {
+                        if (_host is not null) {
+                            if (_host.InvokeRequired)
+                                _host.BeginInvoke(new Action(_host.Close));
+                            else
+                                _host.Close();
+                        }
+                        return true;
+                    }
                     if (kind.GetString() != "__console")
                         return false;
 
@@ -462,7 +487,7 @@ namespace lambdaflow.lambdaflow.Hosts.Windows{
             }
 
             private static string BuildFrontendHeaders(string contentType) {
-                return $"Content-Type: {contentType}\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: {FrontendContentSecurityPolicy}";
+                return $"Content-Type: {contentType}\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: {Config.FrontendContentSecurityPolicy}";
             }
 
         #endregion

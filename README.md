@@ -268,6 +268,9 @@ editable generic skeleton. Every frontend receives `lambdaflow.js`.
   "organizationName": "MyCompany",
   "appIcon": "app.ico",
   "securityMode": "Hardened",
+  "security": {
+    "allowUnsafeEval": false
+  },
   "ipcTransport": "Auto",
   "developmentBackendFolder": "backend",
   "developmentFrontendFolder": "frontend",
@@ -629,6 +632,8 @@ LambdaFlow currently supports only `securityMode: "Hardened"`.
 - Frontend files are served from a private local origin, not directly from arbitrary filesystem URLs.
 - Path traversal outside `frontend.pak` is rejected.
 - The frontend receives a restrictive Content Security Policy.
+- `security.allowUnsafeEval` defaults to `false`. Enable it only for applications
+  that deliberately evaluate trusted dynamic frontend code.
 - Windows disables host objects, context menus, browser shortcuts, status UI, and DevTools unless debug settings allow them.
 - Linux disables context menus and DevTools unless debug settings allow them.
 - Windows named pipes are private to the current user.

@@ -12,6 +12,7 @@ namespace lambdaflow.lambdaflow.Core
         public string Title { get; set; } = "LambdaFlow app";
         public int Width { get; set; } = 800;
         public int Height { get; set; } = 600;
+        public string Mode { get; set; } = "normal";
 
         public int MinWidth { get; set; } = 800;
         public int MinHeight { get; set; } = 600;
@@ -55,6 +56,12 @@ namespace lambdaflow.lambdaflow.Core
         public string BackendLogLevel { get; set; } = "info";
     }
 
+    internal sealed class SecurityConfig
+    {
+        [JsonPropertyName("allowUnsafeEval")]
+        public bool AllowUnsafeEval { get; set; } = false;
+    }
+
     internal sealed class AppConfig
     {
         [JsonPropertyName("appName")]
@@ -84,6 +91,9 @@ namespace lambdaflow.lambdaflow.Core
         [JsonPropertyName("debug")]
         public DebugConfig Debug { get; set; } = new DebugConfig();
 
+        [JsonPropertyName("security")]
+        public SecurityConfig Security { get; set; } = new SecurityConfig();
+
         [JsonPropertyName("platforms")]
         public Dictionary<string, PlatformConfig> Platforms { get; set; } = new Dictionary<string, PlatformConfig>();
     }
@@ -102,8 +112,14 @@ namespace lambdaflow.lambdaflow.Core
         internal static string AppIcon => App.AppIcon;
         internal static ArchConfig CurrentArch => GetCurrentArch();
         internal static DebugConfig Debug => App.Debug ?? new DebugConfig();
+        internal static SecurityConfig Security => App.Security ?? new SecurityConfig();
 
         internal static bool DebugMode => Debug.Enabled && Debug.FrontendDevTools;
+        internal static string FrontendContentSecurityPolicy =>
+            "default-src 'self'; script-src 'self' 'unsafe-inline'" +
+            (Security.AllowUnsafeEval ? " 'unsafe-eval'" : "") +
+            "; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;" +
+            " connect-src 'none'; frame-src 'self' data: blob:; base-uri 'self'; frame-ancestors 'none'";
         internal const string IntegrityManifestFile = "lambdaflow.integrity.json";
 
         internal static readonly SecurityMode SecurityMode = ParseSecurityMode(App.SecurityMode);

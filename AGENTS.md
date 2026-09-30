@@ -114,7 +114,7 @@ Protocol invariants:
 - Serialize each envelope on one line and flush after writing.
 - Protect concurrent writers so JSON lines cannot interleave.
 - Fire-and-forget messages normally have no `id` and must not cause automatic echo replies.
-- `__lambdaflow_ready` and `__console` are host-reserved kinds. Do not forward them to the application backend.
+- `__lambdaflow_ready`, `__lambdaflow_close`, and `__console` are host-reserved kinds. Do not forward them to the application backend.
 
 ## Entity payloads
 
@@ -237,6 +237,7 @@ appVersion
 organizationName
 appIcon
 securityMode                 only Hardened
+security.allowUnsafeEval     false by default; opt in only for trusted dynamic frontend code
 ipcTransport                 Auto | NamedPipe | StdIO
 developmentBackendFolder
 developmentFrontendFolder

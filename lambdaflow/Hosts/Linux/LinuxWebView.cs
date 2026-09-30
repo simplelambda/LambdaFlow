@@ -13,9 +13,6 @@ internal sealed class LinuxWebView : IWebView, IDisposable
 {
     private const string AppScheme = "lambdaflow";
     private const string AppOrigin = AppScheme + "://app/";
-    private const string ContentSecurityPolicy =
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data:; font-src 'self' data:; connect-src 'none'; base-uri 'self'; frame-ancestors 'none'";
 
     private static readonly object FrontendLogLock = new();
 
@@ -137,7 +134,15 @@ internal sealed class LinuxWebView : IWebView, IDisposable
         if (Config.Window.MaxWidth > 0 && Config.Window.MaxHeight > 0)
             window.SetMaxSize(Config.Window.MaxWidth, Config.Window.MaxHeight);
 
+        if (string.Equals(Config.Window.Mode, "maximized", StringComparison.OrdinalIgnoreCase))
+            window.SetMaximized(true);
+        else if (string.Equals(Config.Window.Mode, "fullscreen", StringComparison.OrdinalIgnoreCase))
+            window.SetFullScreen(true);
+
         var iconPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, Config.AppIcon));
+        var portableIconPath = Path.ChangeExtension(iconPath, ".png");
+        if (File.Exists(portableIconPath))
+            iconPath = portableIconPath;
         if (File.Exists(iconPath))
             window.SetIconFile(iconPath);
 
@@ -230,7 +235,7 @@ internal sealed class LinuxWebView : IWebView, IDisposable
               """
             : "";
         var bootstrap = $$"""
-        <meta http-equiv="Content-Security-Policy" content="{{ContentSecurityPolicy}}">
+        <meta http-equiv="Content-Security-Policy" content="{{Config.FrontendContentSecurityPolicy}}">
         <script>
         (function () {
           window.__lambdaFlowInboundQueue = window.__lambdaFlowInboundQueue || [];
@@ -286,6 +291,21 @@ internal sealed class LinuxWebView : IWebView, IDisposable
             if (kind.GetString() == "__lambdaflow_ready") {
                 _frontendReady = true;
                 FlushPendingFrontendMessages();
+                return true;
+            }
+            if (kind.GetString() == "__lambdaflow_window") {
+                if (root.TryGetProperty("payload", out var windowPayload)
+                    && windowPayload.ValueKind == JsonValueKind.Object
+                    && windowPayload.TryGetProperty("width", out var widthValue)
+                    && windowPayload.TryGetProperty("height", out var heightValue)
+                    && widthValue.TryGetInt32(out var width)
+                    && heightValue.TryGetInt32(out var height)) {
+                    ModifySize(Math.Clamp(width, 320, 8192), Math.Clamp(height, 240, 8192));
+                }
+                return true;
+            }
+            if (kind.GetString() == "__lambdaflow_close") {
+                _window?.Close();
                 return true;
             }
             if (kind.GetString() != "__console")

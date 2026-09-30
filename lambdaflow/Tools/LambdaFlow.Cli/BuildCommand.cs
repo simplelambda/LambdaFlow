@@ -140,6 +140,15 @@ internal static class BuildCommand
 
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         File.Copy(source, target, overwrite: true);
+
+        // GTK's available GdkPixbuf loaders are installation-dependent and many
+        // minimal Linux systems cannot decode ICO. Keep an optional PNG sibling
+        // beside the canonical Windows icon so the Linux host has a portable icon.
+        var pngSource = Path.ChangeExtension(source, ".png");
+        if (File.Exists(pngSource)) {
+            EnsureDirectoryWithinProject(projectDir, pngSource, "appIcon PNG sibling");
+            File.Copy(pngSource, Path.ChangeExtension(target, ".png"), overwrite: true);
+        }
     }
 
     private static async Task RunPreBuildCommands(LambdaFlowConfig config, string projectDir) {
